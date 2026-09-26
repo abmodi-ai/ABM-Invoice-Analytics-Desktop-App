@@ -1,3 +1,3 @@
 """ABM Invoice Analytics detection engine."""
 
-ENGINE_VERSION = "0.2.0"
+ENGINE_VERSION = "0.2.1"
