@@ -1,0 +1,69 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      VERISMO_EMBEDDER: hashing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: apps/desktop/package-lock.json }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: clippy }
+      - name: Install Tesseract (bundled into the engine dist)
+        run: choco install tesseract --no-progress -y
+      - name: Python deps
+        run: uv sync --frozen || uv sync
+      - name: Frontend deps
+        working-directory: apps/desktop
+        run: npm ci
+      - name: Lint
+        run: |
+          uv run ruff check engine tools tests
+          cd apps/desktop; npx eslint src; npx tsc -b
+          cd src-tauri; cargo clippy -- -D warnings
+      - name: License gate (runtime deps only)
+        run: |
+          uv run python tools/license_check.py
+          cd apps/desktop; npm run license-check
+      - name: Engine tests (unit, property, fixtures, integration, security, golden)
+        run: uv run pytest -o addopts="" -m "not perf" --timeout=1800 tests/unit tests/integration tests/golden
+      - name: Network test (engine process opens no non-loopback sockets)
+        run: uv run pytest -o addopts="" -m slow tests/integration/test_security.py -k sockets
+      - name: Frontend unit tests
+        working-directory: apps/desktop
+        run: npx vitest run
+      - name: Performance budgets (250k lines)
+        run: uv run python tests/perf/perf_run.py --lines 250000
+      - name: Engine dist (PyInstaller one-dir) + Tesseract
+        shell: pwsh
+        run: |
+          cd engine; uv run pyinstaller verismo-engine.spec --noconfirm --distpath ../build/engine --workpath ../build/pyi-work; cd ..
+          New-Item -ItemType Directory -Force build/engine/verismo-engine/tesseract | Out-Null
+          Copy-Item -Recurse "C:/Program Files/Tesseract-OCR/*" build/engine/verismo-engine/tesseract/
+          Remove-Item -Recurse -Force apps/desktop/src-tauri/resources/engine -ErrorAction SilentlyContinue
+          Copy-Item -Recurse build/engine/verismo-engine apps/desktop/src-tauri/resources/engine
+      - name: Frozen engine smoke test (health, setup, digital + scanned PDF + CSV ingest, sweep, audit; DPAPI keystore)
+        run: uv run python tools/frozen_smoke.py apps/desktop/src-tauri/resources/engine/verismo-engine.exe
+      - name: SBOM (CycloneDX)
+        run: |
+          mkdir build/sbom -Force
+          uv run cyclonedx-py environment --of JSON -o build/sbom/engine.cdx.json
+      - name: Build MSI
+        working-directory: apps/desktop
+        run: npx tauri build
+        # Signing: set TAURI_SIGNING_* / Azure Trusted Signing secrets in the release workflow.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verismo-msi
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/msi/*.msi
+            build/sbom/*.json
+            tests/perf/out/*.json
+            tests/golden/out/*.md
