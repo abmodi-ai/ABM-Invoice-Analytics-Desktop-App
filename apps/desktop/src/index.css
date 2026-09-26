@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/* Design tokens. Text uses text tokens; tiers use the fixed status palette with an icon + label. */
+@theme {
+  --color-surface: #fcfcfb;
+  --color-surface-2: #f4f4f2;
+  --color-border: #e2e1dc;
+  --color-ink: #0b0b0b;
+  --color-ink-2: #52514e;
+  --color-ink-3: #75746f;
+  --color-accent: #2a78d6;
+  --color-accent-ink: #1c5cab;
+  --color-good: #0ca30c;
+  --color-good-ink: #006300;
+  --color-warning: #fab219;
+  --color-serious: #ec835a;
+  --color-critical: #d03b3b;
+  --color-match: #e7f5e7;
+  --color-match-ink: #0b5d0b;
+  --color-diff: #fdf1d8;
+  --color-diff-ink: #7a4d00;
+  --font-sans: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+
+/* Chart roles (reference data-viz palette, slot 1, light surface). */
+.viz-root {
+  --series-1: #2a78d6;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
+/* Visible keyboard focus everywhere (WCAG 2.4.7). */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
