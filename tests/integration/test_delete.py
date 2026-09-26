@@ -61,6 +61,11 @@ def test_delete_api_is_admin_only(client: TestClient, engine: Engine) -> None:  
     assert client.delete(f"/invoices/{a}", headers=reviewer).status_code == 403
     assert client.delete("/invoices/999999", headers=admin).status_code == 404
     assert client.delete(f"/invoices/{a}", headers=admin).json()["invoices"] == 1
+    b = _ingest(engine, "c.pdf", ruled_site_invoice("EX_020", "10/02/2023", REPEAT, []))["persist"]["invoice_ids"][0]
+    assert client.post("/invoices/delete", headers=reviewer, json={"invoice_ids": [b]}).status_code == 403
+    assert client.post("/invoices/delete", headers=admin, json={"invoice_ids": [b, 999999]}).status_code == 404
+    assert _count(engine, "invoices") == 2  # nothing deleted when one id is unknown
+    assert client.post("/invoices/delete", headers=admin, json={"invoice_ids": [b]}).json()["invoices"] == 1
     assert client.post("/data/delete-all", headers=admin, json={"confirm": "yes"}).status_code == 400
     assert client.post("/data/delete-all", headers=admin, json={"confirm": "DELETE"}).json()["invoices"] == 1
     assert _count(engine, "invoices") == 0

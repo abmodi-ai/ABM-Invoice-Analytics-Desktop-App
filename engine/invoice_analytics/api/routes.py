@@ -487,6 +487,21 @@ def delete_invoice(invoice_id: int, request: Request, s: Session = Admin) -> dic
         raise HTTPException(404, "invoice not found") from e
 
 
+class DeleteInvoicesBody(BaseModel):
+    invoice_ids: list[int] = Field(min_length=1, max_length=10_000)
+
+
+@router.post("/invoices/delete", tags=["invoices"])
+def delete_selected_invoices(body: DeleteInvoicesBody, request: Request, s: Session = Admin) -> dict[str, Any]:
+    """Permanently delete the selected invoices (see DELETE /invoices/{id})."""
+    from invoice_analytics.data_admin import delete_invoices
+
+    try:
+        return delete_invoices(E(request), body.invoice_ids, user_id=s.user_id)
+    except KeyError as e:
+        raise HTTPException(404, "invoice not found") from e
+
+
 class DeleteAllBody(BaseModel):
     confirm: str
 
