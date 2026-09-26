@@ -1,14 +1,27 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { Badge, Card, ErrorBox, PageHeader, Spinner, Table, Td, Th, TierBadge } from "../components/ui";
+import { Badge, Button, Card, ErrorBox, Modal, PageHeader, Spinner, Table, Td, Th, TierBadge } from "../components/ui";
+import { useAuth } from "../lib/auth";
 import { dateTime, display, money } from "../lib/format";
 
 export default function InvoiceDetailPage() {
   const { id } = useParams();
   const q = useQuery({ queryKey: ["invoice", id], queryFn: () => api.get(`/invoices/${id}`) });
   const [preview, setPreview] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const { can } = useAuth();
+  const nav = useNavigate();
+  const qc = useQueryClient();
+  const remove = useMutation({
+    mutationFn: () => api.del(`/invoices/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries();
+      nav("/invoices");
+    },
+  });
   const isDoc = q.data && ["PDF_TEXT", "OCR", "LLM"].includes(q.data.ingest_method);
   useEffect(() => {
     if (!isDoc) return;
@@ -30,7 +43,33 @@ export default function InvoiceDetailPage() {
   const hasVisits = inv.lines.some((l: any) => l.visit_label);
   return (
     <div className="space-y-4">
-      <PageHeader title={`Invoice ${inv.invoice_number_raw ?? inv.id}`} subtitle={`${inv.party} · ${inv.direction} · ${inv.status.toLowerCase()}`} />
+      <PageHeader
+        title={`Invoice ${inv.invoice_number_raw ?? inv.id}`}
+        subtitle={`${inv.party} · ${inv.direction} · ${inv.status.toLowerCase()}`}
+        actions={
+          can("ADMIN") && (
+            <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+              <Trash2 className="size-4" /> Delete invoice
+            </Button>
+          )
+        }
+      />
+      <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete this invoice?">
+        <p className="text-sm">
+          Invoice <b>{inv.invoice_number_raw ?? inv.id}</b> from {inv.party} will be permanently deleted: its {inv.lines.length} lines,
+          the source document, and every flag involving it. The deletion is
+          recorded in the audit log. This can&apos;t be undone.
+        </p>
+        <ErrorBox error={remove.error} />
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+            Cancel
+          </Button>
+          <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate()}>
+            Delete invoice
+          </Button>
+        </div>
+      </Modal>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Header" className="lg:col-span-1">
           <dl className="grid grid-cols-[130px_1fr] gap-y-1 text-sm">

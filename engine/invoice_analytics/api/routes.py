@@ -476,6 +476,31 @@ def get_invoice(invoice_id: int, request: Request, s: Session = Viewer) -> dict[
     return invoice_detail(E(request), invoice_id, s.user_id)
 
 
+@router.delete("/invoices/{invoice_id}", tags=["invoices"])
+def delete_invoice(invoice_id: int, request: Request, s: Session = Admin) -> dict[str, Any]:
+    """Permanently delete one invoice with its lines, source document and every flag involving it."""
+    from invoice_analytics.data_admin import delete_invoices
+
+    try:
+        return delete_invoices(E(request), [invoice_id], user_id=s.user_id)
+    except KeyError as e:
+        raise HTTPException(404, "invoice not found") from e
+
+
+class DeleteAllBody(BaseModel):
+    confirm: str
+
+
+@router.post("/data/delete-all", tags=["invoices"])
+def delete_all_invoices(body: DeleteAllBody, request: Request, s: Session = Admin) -> dict[str, Any]:
+    """Start fresh: delete every invoice, document and flag. Settings, users and templates stay."""
+    from invoice_analytics.data_admin import delete_invoices
+
+    if body.confirm != "DELETE":
+        raise HTTPException(400, "type DELETE to confirm")
+    return delete_invoices(E(request), None, user_id=s.user_id)
+
+
 # ====================================================================== flags / review
 _TIER_ORDER = "CASE f.tier WHEN 'HARD' THEN 0 WHEN 'PROBABLE' THEN 1 WHEN 'WEAK' THEN 2 ELSE 3 END"
 

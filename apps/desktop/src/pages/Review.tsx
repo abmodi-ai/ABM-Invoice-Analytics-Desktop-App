@@ -281,29 +281,118 @@ const HEADER_ROWS: Array<[string, string, (i: any) => unknown]> = [
   ["document_sha256", "Source file", (i) => `${i.source_path ?? "—"} (${i.ingest_method ?? "?"})`],
 ];
 
+function LinesTable({ inv, lineIds, tone, showAll }: { inv: any; lineIds: Set<number>; tone: (f: string) => string; showAll: boolean }) {
+  const hasVisits = inv.lines.some((l: any) => l.visit_label);
+  const rows = showAll ? inv.lines : inv.lines.filter((l: any) => lineIds.has(l.id));
+  return (
+    <div className="mt-2 overflow-auto">
+      <table className="w-full text-xs whitespace-nowrap [&_td]:pr-3 [&_th]:pr-3">
+        <thead>
+          <tr className="text-left text-ink-2">
+            <th className="py-1">#</th>
+            <th>Patient</th>
+            <th>DOS</th>
+            {hasVisits && <th>Visit</th>}
+            <th>Code</th>
+            <th>Mods</th>
+            <th className="text-right">Units</th>
+            <th className="text-right">Charge</th>
+            <th>NPI</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((li: any) => {
+            const hit = lineIds.has(li.id);
+            return (
+              <tr key={li.id} className={cn("border-t border-border", hit && showAll && "outline outline-1 outline-accent")}>
+                <td className="py-1">{li.line_no}</td>
+                <td className={cn(hit && tone("patient_cluster"))}>{li.patient_name ?? "—"}</td>
+                <td className={cn(hit && tone("dos"))}>{li.dos_from}</td>
+                {hasVisits && <td className={cn(hit && tone("visit"))}>{li.visit_label ?? "—"}</td>}
+                <td className={cn("font-mono", hit && tone("code"))}>{li.code ?? "—"}</td>
+                <td className={cn(hit && tone("modifiers"))}>{li.modifiers.join(",") || "—"}</td>
+                <td className={cn("num text-right", hit && tone("units"))}>{li.units}</td>
+                <td className={cn("num text-right", hit && tone("charge"))}>{money(li.charge_cents)}</td>
+                <td className={cn("font-mono", hit && tone("rendering_npi"))}>{li.rendering_npi ?? "—"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function InvoiceHeader({ inv, tone }: { inv: any; tone: (f: string) => string }) {
+  return (
+    <dl className="grid grid-cols-[120px_1fr] gap-x-2 text-sm">
+      {HEADER_ROWS.map(([field, name, get]) => (
+        <div key={field} className="contents">
+          <dt className="py-0.5 text-ink-2">{name}</dt>
+          <dd className={cn("rounded px-1 py-0.5", tone(field))}>{display(get(inv))}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function SideBySide({ fl }: { fl: any }) {
   const a = fl.subject_invoice;
   const others: any[] = fl.counterpart_invoices;
   const [k, setK] = useState(0);
+  const [showAll, setShowAll] = useState(false);
   const b = others[k];
   const matched = new Set(fl.evidence.matched_fields.map((m: any) => m.field));
   const differing = new Set(fl.evidence.differing_fields.map((m: any) => m.field));
-  const subjectLineIds = new Set(fl.subject_type === "LINE" ? [fl.subject_id] : []);
-  const cpLineIds = new Set(fl.subject_type === "LINE" ? fl.counterpart_ids : []);
+  const subjectLineIds = new Set<number>(fl.subject_type === "LINE" ? [fl.subject_id] : []);
+  const cpLineIds = new Set<number>(fl.subject_type === "LINE" ? fl.counterpart_ids : []);
   const tone = (field: string) => (matched.has(field) ? "bg-match text-match-ink" : differing.has(field) ? "bg-diff text-diff-ink" : "");
+  const lineFlag = fl.subject_type === "LINE";
+  // Some rules compare two lines of the same invoice (a charge billed twice, two visits on one date).
+  const sameInvoice = lineFlag && b && b.id === a.id;
+  const toggle = lineFlag && (
+    <Button size="sm" variant="ghost" onClick={() => setShowAll(!showAll)}>
+      {showAll ? "Show flagged lines only" : "Show all lines"}
+    </Button>
+  );
+  const legend = (
+    <div className="mb-2 flex gap-3 text-xs text-ink-2">
+      <span className="rounded bg-match px-1.5 text-match-ink">matched</span>
+      <span className="rounded bg-diff px-1.5 text-diff-ink">differs</span>
+    </div>
+  );
+  if (sameInvoice) {
+    const both = new Set<number>([...subjectLineIds, ...cpLineIds]);
+    return (
+      <Card title="Both lines are on the same invoice" actions={toggle}>
+        {legend}
+        <div className="mb-1 flex items-center justify-between text-xs font-medium text-ink-2">
+          Invoice
+          <Link className="text-accent-ink hover:underline" to={`/invoices/${a.id}`}>
+            open invoice
+          </Link>
+        </div>
+        <InvoiceHeader inv={a} tone={() => ""} />
+        <p className="mt-3 text-xs text-ink-2">
+          {showAll ? "All lines; the two flagged lines are outlined." : "The two lines this flag compares:"}
+        </p>
+        <LinesTable inv={a} lineIds={both} tone={tone} showAll={showAll} />
+      </Card>
+    );
+  }
   return (
     <Card
       title="Side by side"
       actions={
-        others.length > 1 && (
-          <Select aria-label="Counterpart" value={String(k)} onChange={(e) => setK(Number(e.target.value))} options={others.map((o, i) => [String(i), `Counterpart ${i + 1}: ${o.invoice_number_raw}`])} />
-        )
+        <div className="flex items-center gap-2">
+          {others.length > 1 && (
+            <Select aria-label="Counterpart" value={String(k)} onChange={(e) => setK(Number(e.target.value))} options={others.map((o, i) => [String(i), `Counterpart ${i + 1}: ${o.invoice_number_raw}`])} />
+          )}
+          {toggle}
+        </div>
       }
     >
-      <div className="mb-2 flex gap-3 text-xs text-ink-2">
-        <span className="rounded bg-match px-1.5 text-match-ink">matched</span>
-        <span className="rounded bg-diff px-1.5 text-diff-ink">differs</span>
-      </div>
+      {legend}
       <div className="grid gap-4 lg:grid-cols-2">
         {[
           ["This record", a, subjectLineIds],
@@ -322,51 +411,8 @@ function SideBySide({ fl }: { fl: any }) {
               <p className="text-sm text-ink-3">No counterpart (limit breached on this record alone).</p>
             ) : (
               <>
-                <dl className="grid grid-cols-[120px_1fr] gap-x-2 text-sm">
-                  {HEADER_ROWS.map(([field, name, get]) => (
-                    <div key={field} className="contents">
-                      <dt className="py-0.5 text-ink-2">{name}</dt>
-                      <dd className={cn("rounded px-1 py-0.5", tone(field))}>{display(get(inv))}</dd>
-                    </div>
-                  ))}
-                </dl>
-                <div className="mt-2 overflow-auto">
-                  <table className="w-full text-xs whitespace-nowrap [&_td]:pr-3 [&_th]:pr-3">
-                    <thead>
-                      <tr className="text-left text-ink-2">
-                        <th className="py-1">#</th>
-                        <th>Patient</th>
-                        <th>DOS</th>
-                        {inv.lines.some((l: any) => l.visit_label) && <th>Visit</th>}
-                        <th>Code</th>
-                        <th>Mods</th>
-                        <th className="text-right">Units</th>
-                        <th className="text-right">Charge</th>
-                        <th>NPI</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inv.lines.map((li: any) => {
-                        const hit = lineIds.has(li.id);
-                        return (
-                          <tr key={li.id} className={cn("border-t border-border", hit && "outline outline-1 outline-accent")}>
-                            <td className="py-1">{li.line_no}</td>
-                            <td className={cn(hit && tone("patient_cluster"))}>{li.patient_name ?? "—"}</td>
-                            <td className={cn(hit && tone("dos"))}>{li.dos_from}</td>
-                            {inv.lines.some((l: any) => l.visit_label) && (
-                              <td className={cn(hit && tone("visit"))}>{li.visit_label ?? "—"}</td>
-                            )}
-                            <td className={cn("font-mono", hit && tone("code"))}>{li.code ?? "—"}</td>
-                            <td className={cn(hit && tone("modifiers"))}>{li.modifiers.join(",") || "—"}</td>
-                            <td className={cn("num text-right", hit && tone("units"))}>{li.units}</td>
-                            <td className={cn("num text-right", hit && tone("charge"))}>{money(li.charge_cents)}</td>
-                            <td className={cn("font-mono", hit && tone("rendering_npi"))}>{li.rendering_npi ?? "—"}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <InvoiceHeader inv={inv} tone={tone} />
+                <LinesTable inv={inv} lineIds={lineIds} tone={tone} showAll={showAll || !lineFlag} />
               </>
             )}
           </div>

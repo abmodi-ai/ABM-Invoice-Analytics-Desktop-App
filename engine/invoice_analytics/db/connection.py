@@ -82,6 +82,7 @@ class Database:
             conn.execute("PRAGMA journal_mode = WAL")
             conn.execute("PRAGMA synchronous = NORMAL")
         conn.execute("PRAGMA temp_store = MEMORY")  # no plaintext temp files
+        conn.execute("PRAGMA secure_delete = ON")  # deleted PHI is zeroed, not left in free pages
         conn.row_factory = _dict_factory
         return conn
 

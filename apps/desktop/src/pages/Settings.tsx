@@ -27,6 +27,7 @@ export default function SettingsPage() {
           <UsersCard />
           <BackupCard />
           <RetentionCard />
+          <StartFreshCard />
         </>
       )}
     </div>
@@ -297,6 +298,39 @@ function RetentionCard() {
       )}
       {apply.data && <p className="mt-2 text-sm text-good-ink">Removed {num(apply.data.invoices_removed)} invoices.</p>}
       <ErrorBox error={preview.error ?? apply.error} />
+    </Card>
+  );
+}
+
+function StartFreshCard() {
+  const [typed, setTyped] = useState("");
+  const qc = useQueryClient();
+  const wipe = useMutation({
+    mutationFn: () => api.post("/data/delete-all", { confirm: typed }),
+    onSuccess: () => {
+      setTyped("");
+      qc.invalidateQueries();
+    },
+  });
+  return (
+    <Card title="Start fresh">
+      <p className="text-sm text-ink-2">
+        Permanently delete every invoice, source document, patient/subject and flag, then start with an empty
+        database. Users, settings, reference data and import templates are kept. The deletion is recorded in the
+        audit log. Make a backup first if you may need the data again.
+      </p>
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <Input label='Type DELETE to confirm' value={typed} onChange={(e) => setTyped(e.target.value)} className="w-48" />
+        <Button variant="danger" disabled={typed !== "DELETE"} loading={wipe.isPending} onClick={() => wipe.mutate()}>
+          Delete all invoices
+        </Button>
+      </div>
+      {wipe.data && (
+        <p className="mt-2 text-sm text-good-ink">
+          Deleted {num(wipe.data.invoices)} invoices, {num(wipe.data.documents)} documents and {num(wipe.data.flags)} flags.
+        </p>
+      )}
+      <ErrorBox error={wipe.error} />
     </Card>
   );
 }
