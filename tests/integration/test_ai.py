@@ -179,3 +179,19 @@ def test_nlq_limit_enforced_and_sensitive_columns_blocked(flagged: Engine) -> No
     assert "LIMIT 7" in validate_sql("SELECT * FROM v_flags LIMIT 7")
     res = run_readonly(flagged, "SELECT rule_id, tier FROM v_flags")
     assert res["row_count"] >= 1
+
+
+def test_setup_state_reports_missing_runner_and_models(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
+    from invoice_analytics.ai import service
+
+    monkeypatch.delenv("IA_LLAMA_SERVER", raising=False)
+    monkeypatch.delenv("IA_LLM_BASE_URL", raising=False)
+    monkeypatch.setattr("shutil.which", lambda _n: None)
+    st = service.setup_state(engine)
+    assert st == {"runner_found": False, "models_installed": []}
+    d = engine.config.models_dir
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "m.gguf").write_bytes(b"x")
+    (d / "manifest.json").write_text(json.dumps({"models": [{"file": "m.gguf"}, {"file": "missing.gguf"}]}))
+    monkeypatch.setenv("IA_LLAMA_SERVER", "/opt/llama-server")
+    assert service.setup_state(engine) == {"runner_found": True, "models_installed": ["m.gguf"]}

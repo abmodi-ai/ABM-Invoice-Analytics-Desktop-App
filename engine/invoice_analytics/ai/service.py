@@ -58,4 +58,25 @@ def status(eng: Engine) -> dict[str, Any]:
         "hardware": hardware.detect(),
         "runtime": rt.status() if rt else {"running": False},
         "queue": eng.jobs.status(),
+        "setup": setup_state(eng),
     }
+
+
+def setup_state(eng: Engine) -> dict[str, Any]:
+    """What is still missing before AI can be switched on (shown as a checklist in the UI)."""
+    import json
+    import os
+    import shutil
+
+    models: list[str] = []
+    manifest = eng.config.models_dir / "manifest.json"
+    if manifest.is_file():
+        try:
+            listed = json.loads(manifest.read_text(encoding="utf-8")).get("models", [])
+            models = [m["file"] for m in listed if (eng.config.models_dir / m["file"]).is_file()]
+        except (ValueError, KeyError, TypeError):
+            models = []
+    runner = bool(
+        os.environ.get("IA_LLAMA_SERVER") or shutil.which("llama-server") or os.environ.get("IA_LLM_BASE_URL")
+    )
+    return {"runner_found": runner, "models_installed": models}

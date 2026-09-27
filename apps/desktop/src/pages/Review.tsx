@@ -481,6 +481,74 @@ function Evidence({ ev }: { ev: any }) {
   );
 }
 
+function Step({ n, done, title, children }: { n: number; done?: boolean; title: string; children: React.ReactNode }) {
+  return (
+    <li className="flex gap-2">
+      <span
+        className={cn(
+          "mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-medium",
+          done ? "bg-match text-match-ink" : "bg-surface-2 text-ink-2",
+        )}
+        aria-label={done ? "done" : `step ${n}`}
+      >
+        {done ? "✓" : n}
+      </span>
+      <div>
+        <div className="font-medium">
+          {title}
+          {done && <span className="ml-1 text-xs font-normal text-good-ink">done</span>}
+        </div>
+        <div className="text-ink-2">{children}</div>
+      </div>
+    </li>
+  );
+}
+
+function AiSetupGuide({ status }: { status: any }) {
+  const { can } = useAuth();
+  const setup = status?.setup ?? {};
+  const models: string[] = setup.models_installed ?? [];
+  const tier = (status?.hardware?.recommended_tier ?? "LITE").toLowerCase();
+  return (
+    <div className="space-y-3 text-sm">
+      <p className="text-ink-2">
+        AI is switched off. Detection and review work fully without it. When it is on, this panel shows a plain-English
+        explanation of the flag and a suggested verdict with its reasoning. It runs only on this computer; nothing is sent
+        anywhere, and you still make every decision.
+      </p>
+      <div className="text-xs font-medium text-ink-2">To switch it on</div>
+      <ol className="space-y-3">
+        <Step n={1} done={setup.runner_found} title="Install the AI runner (llama.cpp)">
+          Free and open source. On Windows, download <span className="font-mono">llama-server.exe</span> from the llama.cpp
+          releases page and add its folder to PATH; on a Mac run <span className="font-mono">brew install llama.cpp</span>. Then
+          restart this app.
+        </Step>
+        <Step n={2} done={models.length > 0} title="Import a model package">
+          {models.length > 0 ? (
+            <>Installed: {models.join(", ")}.</>
+          ) : (
+            <>
+              Get <span className="font-mono">ia-models-lite.zip</span> (about 2.5 GB) from your administrator, then{" "}
+              <b>Settings → Local AI → Import model package…</b> Its checksums and licence are verified before it is installed.
+            </>
+          )}
+        </Step>
+        <Step n={3} title="Choose a tier and click Apply">
+          In <b>Settings → Local AI</b>, set <b>Tier</b> to <b>{tier}</b> (recommended for this computer) and click <b>Apply</b>.
+          The model starts on the first AI task and stops after 10 idle minutes.
+        </Step>
+      </ol>
+      {can("ADMIN") ? (
+        <Link className="inline-block text-accent-ink hover:underline" to="/settings">
+          Open Settings → Local AI
+        </Link>
+      ) : (
+        <p className="text-xs text-ink-3">Steps 2 and 3 need an administrator.</p>
+      )}
+    </div>
+  );
+}
+
 function AiPanel({ fl }: { fl: any }) {
   const qc = useQueryClient();
   const status = useQuery({ queryKey: ["ai-status"], queryFn: () => api.get("/ai/status"), staleTime: 30000 });
@@ -516,7 +584,7 @@ function AiPanel({ fl }: { fl: any }) {
       }
     >
       {off ? (
-        <p className="text-sm text-ink-3">AI is switched off. All detection and review features work without it.</p>
+        <AiSetupGuide status={status.data} />
       ) : (
         <div className="space-y-3 text-sm">
           <div>
