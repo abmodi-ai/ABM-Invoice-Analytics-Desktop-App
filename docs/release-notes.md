@@ -3,7 +3,7 @@
 | Your computer | File |
 |---|---|
 | Windows 10 / 11 (64-bit) | `ABM-Invoice-Analytics-Setup-x64.exe` |
-| Mac with Apple Silicon, macOS 14+ | `ABM-Invoice-Analytics-macOS-AppleSilicon.dmg` |
+| Mac with Apple Silicon, macOS 14 Sonoma (fully updated) or newer | `ABM-Invoice-Analytics-macOS-AppleSilicon.dmg` |
 | Linux 64-bit | `ABM-Invoice-Analytics-Linux-x86_64.AppImage` |
 | All | `SHA256SUMS.txt` — checksums to verify the download |
 

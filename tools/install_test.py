@@ -12,6 +12,7 @@ Linux:   run the AppImage (extract-and-run, so no FUSE is needed; CI wraps this 
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import subprocess
@@ -71,27 +72,35 @@ def wait_healthy(app: subprocess.Popen[bytes], timeout: float = 180) -> int:
 
 
 def stop_and_check(app: subprocess.Popen[bytes] | psutil.Process) -> None:
-    kids = []
+    """Kill the app (as a crash or force-quit would) and check its engine stops by itself."""
     if isinstance(app, subprocess.Popen):
         app = psutil.Process(app.pid)
     try:
         kids = app.children(recursive=True)
-        app.kill()
-        app.wait(timeout=10)  # reap it, as launchd/init would for a real user
-    except (psutil.NoSuchProcess, psutil.TimeoutExpired):
-        pass
+    except psutil.NoSuchProcess:
+        kids = []
     ours = [k for k in kids if k in engines()]  # only engines this test started, never the user's own
-    # The engine watches its parent and exits within a few seconds; nothing else should linger.
+    engine_tree = set(ours)
+    for e in ours:
+        with contextlib.suppress(psutil.Error):
+            engine_tree.update(e.children(recursive=True))
+    # Everything else in the tree is the app: on Linux the AppImage runtime starts the real app as a
+    # child, so killing only the process we launched would leave the app (and rightly its engine) up.
+    for p in [app, *(k for k in kids if k not in engine_tree)]:
+        with contextlib.suppress(psutil.Error):
+            p.kill()
+    for p in [app, *(k for k in kids if k not in engine_tree)]:
+        with contextlib.suppress(psutil.Error):
+            p.wait(timeout=10)  # reap, as launchd/init would for a real user
+    # The engine watches its parent and exits within a few seconds.
     end = time.monotonic() + 20
-    while time.monotonic() < end and any(p.is_running() for p in ours):
+    while time.monotonic() < end and any(p.is_running() and p.status() != psutil.STATUS_ZOMBIE for p in ours):
         time.sleep(1)
     left = [p for p in ours if p.is_running() and p.status() != psutil.STATUS_ZOMBIE]
-    for k in kids:
-        if k.is_running() and k not in left:
-            k.kill()
-    if left:
-        for p in left:
+    for p in engine_tree:
+        with contextlib.suppress(psutil.Error):
             p.kill()
+    if left:
         raise SystemExit("the engine outlived the app (parent watchdog did not stop it)")
     print("engine stopped with the app")
 

@@ -11,7 +11,7 @@ decide. Nothing leaves the machine.
 | Your computer | Download | Size |
 |---|---|---|
 | **Windows** 10 / 11 (64-bit) | **[⬇ ABM-Invoice-Analytics-Setup-x64.exe](https://github.com/abmodi-ai/ABM-Invoice-Analytics-Desktop-App/releases/latest/download/ABM-Invoice-Analytics-Setup-x64.exe)** | ~105 MB |
-| **Mac** with Apple Silicon (M1 or newer), macOS 14+ | **[⬇ ABM-Invoice-Analytics-macOS-AppleSilicon.dmg](https://github.com/abmodi-ai/ABM-Invoice-Analytics-Desktop-App/releases/latest/download/ABM-Invoice-Analytics-macOS-AppleSilicon.dmg)** | ~150 MB |
+| **Mac** with Apple Silicon (M1 or newer), macOS 14 Sonoma (fully updated) or newer | **[⬇ ABM-Invoice-Analytics-macOS-AppleSilicon.dmg](https://github.com/abmodi-ai/ABM-Invoice-Analytics-Desktop-App/releases/latest/download/ABM-Invoice-Analytics-macOS-AppleSilicon.dmg)** | ~150 MB |
 | **Linux** 64-bit (Ubuntu 22.04+, Debian 12+, Fedora 38+) | **[⬇ ABM-Invoice-Analytics-Linux-x86_64.AppImage](https://github.com/abmodi-ai/ABM-Invoice-Analytics-Desktop-App/releases/latest/download/ABM-Invoice-Analytics-Linux-x86_64.AppImage)** | ~200 MB |
 
 All versions and checksums: [Releases page](https://github.com/abmodi-ai/ABM-Invoice-Analytics-Desktop-App/releases/latest). Each download is the whole app; no

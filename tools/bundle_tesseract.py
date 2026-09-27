@@ -120,8 +120,8 @@ def _vers(v: str) -> tuple[int, ...]:
 
 
 def check_macos_minimum(engine: Path, minimum: str) -> None:
-    """Fail if any bundled Mach-O file needs a newer macOS than the app promises (Homebrew and some
-    wheels are built for the build machine's own macOS version)."""
+    """Fail if any bundled Mach-O file needs a newer major macOS than the app promises (Homebrew and
+    some wheels are built for the build machine's own macOS version)."""
     too_new = []
     for f in engine.rglob("*"):
         if not f.is_file() or f.is_symlink() or f.stat().st_size < 4096:
@@ -131,7 +131,9 @@ def check_macos_minimum(engine: Path, minimum: str) -> None:
                 continue
         out = subprocess.run(["otool", "-l", str(f)], capture_output=True, text=True).stdout  # noqa: S603, S607
         m = re.search(r"LC_BUILD_VERSION.*?minos ([0-9.]+)", out, re.S)
-        if m and _vers(m.group(1)) > _vers(minimum):
+        # Compare major versions: minor updates are free for every Mac on that major release, and
+        # Homebrew builds from source for the runner's exact version (e.g. 14.8).
+        if m and _vers(m.group(1))[0] > _vers(minimum)[0]:
             too_new.append(f"{m.group(1)}  {f.relative_to(engine)}")
     if too_new:
         raise SystemExit(f"{len(too_new)} bundled files need macOS newer than {minimum}:\n" + "\n".join(too_new[:20]))
