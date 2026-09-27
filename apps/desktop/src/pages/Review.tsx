@@ -520,10 +520,17 @@ function AiSetupGuide({ status }: { status: any }) {
   const setup = status?.setup ?? {};
   const models: string[] = setup.models_installed ?? [];
   const tier = (status?.hardware?.recommended_tier ?? "LITE").toLowerCase();
+  const onButBlocked = status && status.tier !== "OFF" && setup.ready === false;
   return (
     <div className="space-y-3 text-sm">
+      {onButBlocked && (
+        <p className="rounded border border-warning/40 bg-diff p-2 text-diff-ink" role="status">
+          AI is set to <b>{String(status.tier).toLowerCase()}</b>, but it can&apos;t run on this computer yet:{" "}
+          {(setup.missing ?? []).join("; ")}. No AI work is queued until the steps below are done.
+        </p>
+      )}
       <p className="text-ink-2">
-        AI is switched off. Detection and review work fully without it. When it is on, this panel shows a plain-English
+        {onButBlocked ? "AI is not running." : "AI is switched off."} Detection and review work fully without it. When it is on, this panel shows a plain-English
         explanation of the flag and a suggested verdict with its reasoning. It runs only on this computer; nothing is sent
         anywhere, and you still make every decision.
       </p>
@@ -574,7 +581,9 @@ function AiPanel({ fl }: { fl: any }) {
     queryFn: () => api.get(`/ai/suggestions/${fl.ai.triage.id}`),
     enabled: open && !!fl.ai.triage,
   });
-  const off = !status.data || status.data.tier === "OFF"; // treat "still loading" as off: never show AI UI unasked
+  // Treat "still loading" as off (never show AI UI unasked), and a tier that is on but cannot run
+  // (runner or model missing) as off too: its jobs could only fail.
+  const off = !status.data || status.data.tier === "OFF" || status.data.setup?.ready === false;
   const ex = fl.ai.explain;
   const tr = fl.ai.triage;
   const verdict = tr?.output;

@@ -313,6 +313,10 @@ def _enqueue_ai(eng: Engine, res: DetectionResult) -> None:
     """Queue EXPLAIN / TRIAGE jobs for new flags when AI is enabled. Never blocks detection."""
     if eng.settings.get("ai.tier", "OFF") == "OFF" or not res.new_flag_ids:
         return
+    from invoice_analytics.ai.service import setup_state
+
+    if not setup_state(eng)["ready"]:  # queued jobs could only fail; the AI panel says what is missing
+        return
     from invoice_analytics.ai.jobs import PRIORITY
 
     auto_explain = eng.settings.get("ai.auto_explain", True)

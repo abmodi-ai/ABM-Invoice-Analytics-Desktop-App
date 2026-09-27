@@ -76,7 +76,9 @@ def setup_state(eng: Engine) -> dict[str, Any]:
             models = [m["file"] for m in listed if (eng.config.models_dir / m["file"]).is_file()]
         except (ValueError, KeyError, TypeError):
             models = []
-    runner = bool(
-        os.environ.get("IA_LLAMA_SERVER") or shutil.which("llama-server") or os.environ.get("IA_LLM_BASE_URL")
-    )
-    return {"runner_found": runner, "models_installed": models}
+    external = bool(os.environ.get("IA_LLM_BASE_URL"))  # an already-running OpenAI-compatible server
+    runner = bool(external or os.environ.get("IA_LLAMA_SERVER") or shutil.which("llama-server"))
+    missing = [] if runner else ["the AI runner (llama-server) is not installed"]
+    if not (models or external):
+        missing.append("no model package has been imported")
+    return {"runner_found": runner, "models_installed": models, "ready": not missing, "missing": missing}

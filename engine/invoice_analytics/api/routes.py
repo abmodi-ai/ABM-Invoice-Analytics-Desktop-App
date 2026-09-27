@@ -1035,6 +1035,12 @@ def ai_tier(body: TierBody, request: Request, s: Session = Admin) -> dict[str, A
     hw = hardware.detect()
     if body.tier != "OFF" and body.tier not in hw["eligible_tiers"]:
         raise HTTPException(400, f"this machine does not meet the {body.tier} requirements")
+    if body.tier != "OFF":
+        from invoice_analytics.ai.service import setup_state
+
+        st = setup_state(eng)
+        if not st["ready"]:
+            raise HTTPException(400, "AI can't be switched on yet: " + "; ".join(st["missing"]) + ".")
     eng.settings.set("ai.tier", body.tier, s.user_id)
     if body.model_path is not None:
         eng.settings.set("ai.model_path", Path(body.model_path).name, s.user_id)
@@ -1044,8 +1050,13 @@ def ai_tier(body: TierBody, request: Request, s: Session = Admin) -> dict[str, A
 
 
 def _require_ai(eng: Engine) -> None:
+    from invoice_analytics.ai.service import setup_state
+
     if eng.settings.get("ai.tier", "OFF") == "OFF":
         raise HTTPException(409, "AI is switched off")
+    st = setup_state(eng)
+    if not st["ready"]:
+        raise HTTPException(409, "AI can't run on this computer yet: " + "; ".join(st["missing"]) + ".")
 
 
 @router.post("/ai/explain/{flag_id}", tags=["ai"])

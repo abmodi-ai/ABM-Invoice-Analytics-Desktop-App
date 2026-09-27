@@ -188,10 +188,47 @@ def test_setup_state_reports_missing_runner_and_models(engine: Engine, monkeypat
     monkeypatch.delenv("IA_LLM_BASE_URL", raising=False)
     monkeypatch.setattr("shutil.which", lambda _n: None)
     st = service.setup_state(engine)
-    assert st == {"runner_found": False, "models_installed": []}
+    assert st["runner_found"] is False and st["models_installed"] == [] and st["ready"] is False
+    assert len(st["missing"]) == 2
     d = engine.config.models_dir
     d.mkdir(parents=True, exist_ok=True)
     (d / "m.gguf").write_bytes(b"x")
     (d / "manifest.json").write_text(json.dumps({"models": [{"file": "m.gguf"}, {"file": "missing.gguf"}]}))
     monkeypatch.setenv("IA_LLAMA_SERVER", "/opt/llama-server")
-    assert service.setup_state(engine) == {"runner_found": True, "models_installed": ["m.gguf"]}
+    st = service.setup_state(engine)
+    assert st["runner_found"] and st["models_installed"] == ["m.gguf"] and st["ready"] and st["missing"] == []
+
+
+def test_ai_cannot_be_switched_on_until_ready_and_queues_nothing(
+    flagged: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fastapi.testclient import TestClient
+
+    from invoice_analytics.api.app import create_app
+
+    for v in ("IA_LLAMA_SERVER", "IA_LLM_BASE_URL"):
+        monkeypatch.delenv(v, raising=False)
+    monkeypatch.setattr("shutil.which", lambda _n: None)
+    flagged.config.token = "t" * 40
+    with TestClient(create_app(flagged), base_url="http://127.0.0.1") as c:
+        c.headers.update({"Authorization": "Bearer " + "t" * 40})
+        sess = c.post("/auth/auto").json()["session_token"]
+        r = c.post("/ai/tier", headers={"X-IA-Session": sess}, json={"tier": "LITE"})
+        assert r.status_code == 400 and "llama-server" in r.json()["detail"]
+        flagged.settings.set("ai.tier", "LITE")  # e.g. left on from before the runner was removed
+        r = c.post(f"/ai/explain/{_cln001(flagged)}", headers={"X-IA-Session": sess})
+        assert r.status_code == 409 and "can't run" in r.json()["detail"]
+        flagged.settings.set("ai.tier", "OFF")
+    assert flagged.settings.get("ai.tier") == "OFF"
+    # a tier left on from before (or set elsewhere) still queues no jobs that could only fail
+    flagged.settings.set("ai.tier", "LITE")
+    from invoice_analytics.scoring.pipeline import detect
+
+    n0 = flagged.db.scalar("SELECT COUNT(*) FROM jobs")
+    ingest(
+        flagged,
+        "c.csv",
+        row("Acme", "INV-0099", "2026-05-02", "125.00", 1, "Maria", "Garcia", "2026-03-04", "97110", charge="125.00"),
+    )
+    detect(flagged, None)
+    assert flagged.db.scalar("SELECT COUNT(*) FROM jobs") == n0

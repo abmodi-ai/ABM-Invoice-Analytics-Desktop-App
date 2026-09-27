@@ -94,6 +94,11 @@ function AiSettings() {
       ) : (
         <p className="text-sm">Current tier: {st.data.tier.toLowerCase()}</p>
       )}
+      {st.data.setup && !st.data.setup.ready && (
+        <p className="mt-2 text-sm text-ink-2">
+          Before AI can be switched on: {st.data.setup.missing.join("; ")}. See the steps in the AI assistance panel of the review queue.
+        </p>
+      )}
       <ErrorBox error={save.error ?? importPkg.error} />
       {importPkg.data && <p className="mt-2 text-sm text-good-ink">Installed {importPkg.data.installed.map((m: any) => m.file).join(", ")} (hash verified).</p>}
       <p className="mt-3 text-xs text-ink-3">
