@@ -204,11 +204,14 @@ def test_ai_cannot_be_switched_on_until_ready_and_queues_nothing(
 ) -> None:
     from fastapi.testclient import TestClient
 
+    from invoice_analytics.ai import hardware
     from invoice_analytics.api.app import create_app
 
     for v in ("IA_LLAMA_SERVER", "IA_LLM_BASE_URL"):
         monkeypatch.delenv(v, raising=False)
     monkeypatch.setattr("shutil.which", lambda _n: None)
+    real = hardware.detect()  # the check under test is readiness, not this machine's RAM
+    monkeypatch.setattr(hardware, "detect", lambda: {**real, "eligible_tiers": ["LITE", "STANDARD", "PLUS"]})
     flagged.config.token = "t" * 40
     with TestClient(create_app(flagged), base_url="http://127.0.0.1") as c:
         c.headers.update({"Authorization": "Bearer " + "t" * 40})
