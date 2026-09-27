@@ -23,6 +23,7 @@ function useFilters() {
     to: sp.get("to") ?? "",
     min_cents: sp.get("min_cents") ?? "",
     sort: sp.get("sort") ?? "priority",
+    scope: sp.get("scope") ?? "",
   };
   const set = (k: string, v: string) => {
     const n = new URLSearchParams(sp);
@@ -71,6 +72,14 @@ export default function ReviewPage() {
           <Select label="Sort" value={f.sort} onChange={(e) => setF("sort", e.target.value)} options={[["priority", "Priority"], ["amount", "Amount"], ["newest", "Newest"], ["date", "Invoice date"]]} />
           <Input label="Invoice from" type="date" value={f.from} onChange={(e) => setF("from", e.target.value)} />
           <Input label="Invoice to" type="date" value={f.to} onChange={(e) => setF("to", e.target.value)} />
+          <div className="col-span-2">
+            <Select
+              label="Compared with"
+              value={f.scope}
+              onChange={(e) => setF("scope", e.target.value)}
+              options={[["", "Any"], ["ACROSS", "Other invoices (billed before)"], ["WITHIN", "Lines on the same invoice"], ["SINGLE", "Limits on one record"]]}
+            />
+          </div>
         </div>
         <div className="mb-1 text-xs text-ink-3">
           {num(list.data?.total)} flags · <Kbd>J</Kbd>/<Kbd>K</Kbd> move · <Kbd>C</Kbd> <Kbd>D</Kbd> <Kbd>N</Kbd> decide
@@ -93,7 +102,9 @@ export default function ReviewPage() {
                   <span className="font-mono text-xs text-ink-2">{it.rule_id}</span> {it.party} · {it.invoice_number}
                 </div>
                 <div className="truncate text-xs text-ink-3">{it.summary}</div>
-                <div className="mt-0.5 flex gap-1">
+                <div className="mt-0.5 flex flex-wrap gap-1">
+                  {it.scope === "ACROSS" && <Badge tone="accent">vs. another invoice</Badge>}
+                  {it.scope === "WITHIN" && <Badge>same invoice</Badge>}
                   {it.status !== "OPEN" && <Badge>{it.status.toLowerCase()}</Badge>}
                   {it.sibling_count > 0 && (
                     <Badge>

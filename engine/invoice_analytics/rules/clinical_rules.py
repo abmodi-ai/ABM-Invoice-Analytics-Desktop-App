@@ -1,4 +1,4 @@
-"""Line-level clinical rules CLN-001 .. CLN-009.
+"""Line-level clinical rules CLN-001 .. CLN-013.
 
 Reference lookups are effective-dated by the line's date of service, never by today's date.
 """
@@ -662,6 +662,50 @@ class CLN012(Rule):
         ]
 
 
+class CLN013(Rule):
+    rule_id = "CLN-013"
+    subject_type = "LINE"
+    default_tier = "PROBABLE"
+    base_score = 0.8
+    title = "Protocol visit already billed on another invoice"
+    summary_template = (
+        "{code} at visit {visit} for this subject was already billed on invoice {other_invoice} "
+        "(dated {other_dos}, {other_charge}); a protocol visit is billed once per subject."
+    )
+
+    def run(self, ctx: RuleContext) -> list[Candidate]:
+        # Same subject, same protocol timepoint, same item on a *different* invoice, under another date.
+        # Same-date repeats are CLN-001 (exact duplicate across invoices).
+        rows = ctx.q(f"""
+            SELECT b.id AS subject, a.id AS other, a.dos AS a_dos, a.charge AS a_charge, b.visit AS visit
+            FROM lines a JOIN lines b
+              ON a.patient_cluster = b.patient_cluster AND a.visit = b.visit AND a.code = b.code
+             AND a.invoice_id <> b.invoice_id
+            WHERE {LINE_ORDER} AND {_LIVE} AND {_scope(ctx)} AND a.patient_cluster IS NOT NULL
+              AND a.code IS NOT NULL AND a.visit IS NOT NULL
+              AND a.dos IS DISTINCT FROM b.dos AND b.charge > 0""")
+        t = self.tier(ctx)
+        from invoice_analytics.normalize import format_cents
+
+        return [
+            Candidate(
+                self.rule_id,
+                "LINE",
+                r["subject"],
+                (r["other"],),
+                t,
+                self.base_score,
+                methods={"patient_cluster": "exact", "visit": "exact", "code": "exact"},
+                summary_params={
+                    "visit": r["visit"],
+                    "other_dos": str(r["a_dos"]) if r["a_dos"] else "no date",
+                    "other_charge": format_cents(int(r["a_charge"] or 0)),
+                },
+            )
+            for r in rows
+        ]
+
+
 CLINICAL_RULES: list[Rule] = [
     CLN001(),
     CLN002(),
@@ -675,4 +719,5 @@ CLINICAL_RULES: list[Rule] = [
     CLN010(),
     CLN011(),
     CLN012(),
+    CLN013(),
 ]

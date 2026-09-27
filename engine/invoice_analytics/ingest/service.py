@@ -189,7 +189,57 @@ def run_incremental(eng: Engine, pres: PersistResult, user_id: int | None) -> di
     if pres.new_patient_ids:
         eng.store.refresh_clusters()
     res = detect(eng, pres.invoice_ids, user_id=user_id)
-    return res.stats()
+    return {**res.stats(), "history": history_check(eng, pres.invoice_ids)}
+
+
+def history_check(eng: Engine, invoice_ids: list[int]) -> dict[str, Any]:
+    """The answer to "has anything on this upload been billed before?" for the ingest screen: how many
+    lines and patients/subjects were checked, how many earlier lines exist for those patients on other
+    invoices, and the flags that link this upload to another invoice."""
+    if not invoice_ids:
+        return {"lines": 0, "patients": 0, "earlier_lines": 0, "earlier_invoices": 0, "repeats": []}
+    ph = ",".join("?" * len(invoice_ids))
+    ids = list(invoice_ids)
+    lines = eng.db.scalar(f"SELECT COUNT(*) FROM invoice_lines WHERE invoice_id IN ({ph}) AND deleted_at IS NULL", ids)
+    clusters = [
+        r["c"]
+        for r in eng.db.query(
+            f"SELECT DISTINCT COALESCE(pt.cluster_id, pt.id) AS c FROM invoice_lines l JOIN patients pt"
+            f" ON pt.id=l.patient_id WHERE l.invoice_id IN ({ph}) AND l.deleted_at IS NULL",
+            ids,
+        )
+    ]
+    earlier = {"n": 0, "inv": 0}
+    if clusters:
+        cp = ",".join("?" * len(clusters))
+        earlier = (
+            eng.db.one(
+                f"SELECT COUNT(*) AS n, COUNT(DISTINCT l.invoice_id) AS inv FROM invoice_lines l"
+                f" JOIN patients pt ON pt.id=l.patient_id JOIN invoices i ON i.id=l.invoice_id"
+                f" WHERE COALESCE(pt.cluster_id, pt.id) IN ({cp}) AND l.invoice_id NOT IN ({ph})"
+                f" AND l.deleted_at IS NULL AND i.deleted_at IS NULL",
+                [*clusters, *ids],
+            )
+            or earlier
+        )
+    repeats = [
+        {"flag_id": r["id"], "rule_id": r["rule_id"], "tier": r["tier"], "summary": r["summary"]}
+        for r in eng.db.query(
+            f"SELECT f.id, f.rule_id, f.tier, json_extract(f.evidence,'$.summary') AS summary FROM flags f"
+            f" WHERE f.subject_invoice_id IN ({ph}) AND f.active=1 AND f.suppressed_by IS NULL"
+            f" AND f.tier IN ('HARD','PROBABLE') AND f.counterpart_invoice_ids NOT IN ('[]','')"
+            f" AND json(f.counterpart_invoice_ids) <> json_array(f.subject_invoice_id)"
+            f" ORDER BY CASE f.tier WHEN 'HARD' THEN 0 WHEN 'PROBABLE' THEN 1 WHEN 'WEAK' THEN 2 ELSE 3 END, f.score DESC",
+            ids,
+        )
+    ]
+    return {
+        "lines": int(lines or 0),
+        "patients": len(clusters),
+        "earlier_lines": int(earlier["n"] or 0),
+        "earlier_invoices": int(earlier["inv"] or 0),
+        "repeats": repeats,
+    }
 
 
 def apply_remittances(eng: Engine, remits: list[dict[str, Any]], user_id: int | None) -> int:

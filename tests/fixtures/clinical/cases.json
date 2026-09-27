@@ -10986,6 +10986,919 @@
      "orig": null
     }
    ]
+  },
+  {
+   "id": "CLN-013-P01",
+   "rule": "CLN-013",
+   "expect": "fire",
+   "tier": "PROBABLE",
+   "note": "",
+   "invoices": [
+    {
+     "number": "A130",
+     "date": "2026-02-08",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-02-03",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "B130",
+     "date": "2026-02-28",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-02-06",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-P02",
+   "rule": "CLN-013",
+   "expect": "fire",
+   "tier": "PROBABLE",
+   "note": "",
+   "invoices": [
+    {
+     "number": "A131",
+     "date": "2026-02-15",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-02-10",
+       "code": "COHORT 1: D-8",
+       "units": 1,
+       "mods": "",
+       "charge": 385000,
+       "npi": "N1",
+       "desc": "",
+       "visit": "D-8"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "B131",
+     "date": "2026-02-28",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-02-11",
+       "code": "COHORT 1: D-8",
+       "units": 1,
+       "mods": "",
+       "charge": 390000,
+       "npi": "N1",
+       "desc": "",
+       "visit": "D-8"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-P03",
+   "rule": "CLN-013",
+   "expect": "fire",
+   "tier": "PROBABLE",
+   "note": "",
+   "invoices": [
+    {
+     "number": "A132",
+     "date": "2026-03-09",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-03-04",
+       "code": "COHORT 2: D0",
+       "units": 1,
+       "mods": "",
+       "charge": 1675000,
+       "npi": "N1",
+       "desc": "",
+       "visit": "D0"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "B132",
+     "date": "2026-03-28",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-03-18",
+       "code": "COHORT 2: D0",
+       "units": 1,
+       "mods": "",
+       "charge": 1675000,
+       "npi": "N1",
+       "desc": "",
+       "visit": "D0"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-P04",
+   "rule": "CLN-013",
+   "expect": "fire",
+   "tier": "PROBABLE",
+   "note": "",
+   "invoices": [
+    {
+     "number": "A133",
+     "date": "2026-03-22",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-03-17",
+       "code": "SCREENING",
+       "units": 1,
+       "mods": "",
+       "charge": 650000,
+       "npi": "N1",
+       "desc": "",
+       "visit": "Screening"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "B133",
+     "date": "2026-03-28",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-03-28",
+       "code": "SCREENING",
+       "units": 1,
+       "mods": "",
+       "charge": 655000,
+       "npi": "N1",
+       "desc": "",
+       "visit": "Screening"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-P05",
+   "rule": "CLN-013",
+   "expect": "fire",
+   "tier": "PROBABLE",
+   "note": "",
+   "invoices": [
+    {
+     "number": "A134",
+     "date": "2026-04-06",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-04-01",
+       "code": "TRAVEL REIMBURSEMENT",
+       "units": 1,
+       "mods": "",
+       "charge": 8250,
+       "npi": "N1",
+       "desc": "",
+       "visit": "D-8"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "B134",
+     "date": "2026-04-28",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-04-03",
+       "code": "TRAVEL REIMBURSEMENT",
+       "units": 1,
+       "mods": "",
+       "charge": 8250,
+       "npi": "N1",
+       "desc": "",
+       "visit": "D-8"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-P06",
+   "rule": "CLN-013",
+   "expect": "fire",
+   "tier": "PROBABLE",
+   "note": "",
+   "invoices": [
+    {
+     "number": "A135",
+     "date": "2026-04-26",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-04-21",
+       "code": "CT CHEST W CONTRAST",
+       "units": 1,
+       "mods": "",
+       "charge": 412000,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M2"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "B135",
+     "date": "2026-04-28",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-04-28",
+       "code": "CT CHEST W CONTRAST",
+       "units": 1,
+       "mods": "",
+       "charge": 417000,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M2"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-P07",
+   "rule": "CLN-013",
+   "expect": "fire",
+   "tier": "PROBABLE",
+   "note": "",
+   "invoices": [
+    {
+     "number": "A136",
+     "date": "2026-05-10",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-05-05",
+       "code": "COHORT 1: LEUKAPHERESIS",
+       "units": 1,
+       "mods": "",
+       "charge": 990000,
+       "npi": "N1",
+       "desc": "",
+       "visit": "Leukapheresis"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "B136",
+     "date": "2026-05-28",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-05-10",
+       "code": "COHORT 1: LEUKAPHERESIS",
+       "units": 1,
+       "mods": "",
+       "charge": 990000,
+       "npi": "N1",
+       "desc": "",
+       "visit": "Leukapheresis"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-P08",
+   "rule": "CLN-013",
+   "expect": "fire",
+   "tier": "PROBABLE",
+   "note": "",
+   "invoices": [
+    {
+     "number": "A137",
+     "date": "2026-05-28",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-05-26",
+       "code": "D28",
+       "units": 1,
+       "mods": "",
+       "charge": 120000,
+       "npi": "N1",
+       "desc": "",
+       "visit": "D28"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "B137",
+     "date": "2026-05-28",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-05-28",
+       "code": "D28",
+       "units": 1,
+       "mods": "",
+       "charge": 125000,
+       "npi": "N1",
+       "desc": "",
+       "visit": "D28"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-P09",
+   "rule": "CLN-013",
+   "expect": "fire",
+   "tier": "PROBABLE",
+   "note": "",
+   "invoices": [
+    {
+     "number": "A138",
+     "date": "2026-06-07",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-06-02",
+       "code": "MONTH 3 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 365200,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M3D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "B138",
+     "date": "2026-06-28",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-06-03",
+       "code": "MONTH 3 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 365200,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M3D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-P10",
+   "rule": "CLN-013",
+   "expect": "fire",
+   "tier": "PROBABLE",
+   "note": "",
+   "invoices": [
+    {
+     "number": "A139",
+     "date": "2026-06-21",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-06-16",
+       "code": "LYMPHODEPLETION DAY -5",
+       "units": 1,
+       "mods": "",
+       "charge": 117600,
+       "npi": "N1",
+       "desc": "",
+       "visit": "D-5"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "B139",
+     "date": "2026-06-28",
+     "lines": [
+      {
+       "patient": "P1",
+       "dos": "2026-06-26",
+       "code": "LYMPHODEPLETION DAY -5",
+       "units": 1,
+       "mods": "",
+       "charge": 122600,
+       "npi": "N1",
+       "desc": "",
+       "visit": "D-5"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-N01",
+   "rule": "CLN-013",
+   "expect": "none",
+   "tier": null,
+   "note": "same invoice (CLN-010/012 territory)",
+   "invoices": [
+    {
+     "number": "N130",
+     "date": "2026-02-12",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-02-03",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      },
+      {
+       "patient": "P2",
+       "dos": "2026-02-10",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-N02",
+   "rule": "CLN-013",
+   "expect": "none",
+   "tier": null,
+   "note": "different subject",
+   "invoices": [
+    {
+     "number": "N131a",
+     "date": "2026-02-15",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-02-10",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "N131b",
+     "date": "2026-02-28",
+     "lines": [
+      {
+       "patient": "P3",
+       "dos": "2026-02-17",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-N03",
+   "rule": "CLN-013",
+   "expect": "none",
+   "tier": null,
+   "note": "different visit",
+   "invoices": [
+    {
+     "number": "N132a",
+     "date": "2026-03-09",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-03-04",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "N132b",
+     "date": "2026-03-28",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-03-11",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D2"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-N04",
+   "rule": "CLN-013",
+   "expect": "none",
+   "tier": null,
+   "note": "different item at same visit",
+   "invoices": [
+    {
+     "number": "N133a",
+     "date": "2026-03-22",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-03-17",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "N133b",
+     "date": "2026-03-28",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-03-24",
+       "code": "MONTH 1 DAY 2",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-N05",
+   "rule": "CLN-013",
+   "expect": "none",
+   "tier": null,
+   "note": "same date (CLN-001 territory)",
+   "invoices": [
+    {
+     "number": "N134a",
+     "date": "2026-04-06",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-04-01",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "N134b",
+     "date": "2026-04-28",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-04-01",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-N06",
+   "rule": "CLN-013",
+   "expect": "none",
+   "tier": null,
+   "note": "no visit label (claims)",
+   "invoices": [
+    {
+     "number": "N135a",
+     "date": "2026-04-26",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-04-21",
+       "code": "99213",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": null
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "N135b",
+     "date": "2026-04-28",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-04-28",
+       "code": "99213",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": null
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-N07",
+   "rule": "CLN-013",
+   "expect": "none",
+   "tier": null,
+   "note": "zero charge",
+   "invoices": [
+    {
+     "number": "N136a",
+     "date": "2026-05-10",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-05-05",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 0,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "N136b",
+     "date": "2026-05-28",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-05-12",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 0,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-N08",
+   "rule": "CLN-013",
+   "expect": "none",
+   "tier": null,
+   "note": "single invoice, single line",
+   "invoices": [
+    {
+     "number": "N137",
+     "date": "2026-05-28",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-05-26",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-N09",
+   "rule": "CLN-013",
+   "expect": "none",
+   "tier": null,
+   "note": "different visit 2",
+   "invoices": [
+    {
+     "number": "N138a",
+     "date": "2026-06-07",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-06-02",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "N138b",
+     "date": "2026-06-28",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-06-09",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D2"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
+  },
+  {
+   "id": "CLN-013-N10",
+   "rule": "CLN-013",
+   "expect": "none",
+   "tier": null,
+   "note": "different subject 2",
+   "invoices": [
+    {
+     "number": "N139a",
+     "date": "2026-06-21",
+     "lines": [
+      {
+       "patient": "P2",
+       "dos": "2026-06-16",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    },
+    {
+     "number": "N139b",
+     "date": "2026-06-28",
+     "lines": [
+      {
+       "patient": "P3",
+       "dos": "2026-06-23",
+       "code": "MONTH 1 DAY 1",
+       "units": 1,
+       "mods": "",
+       "charge": 183900,
+       "npi": "N1",
+       "desc": "",
+       "visit": "M1D1"
+      }
+     ],
+     "freq": null,
+     "orig": null
+    }
+   ]
   }
  ]
 }

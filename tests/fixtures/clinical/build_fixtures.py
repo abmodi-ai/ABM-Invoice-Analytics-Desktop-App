@@ -634,6 +634,66 @@ def cases() -> list[dict]:
             dos = later(d, k * 2) if shift else d
             invs.append(I(f"N12{i}_{k}", later(d, 9), [L(patient, dos, code, charge=300000 + k, visit=visit)]))
         add("CLN-012", "none", invs, note=note)
+
+    # ---------------- CLN-013 protocol visit already billed on another invoice (date differs)
+    visits13 = [
+        ("M1D1", "MONTH 1 DAY 1", 183900, 3),
+        ("D-8", "COHORT 1: D-8", 385000, 1),
+        ("D0", "COHORT 2: D0", 1675000, 14),
+        ("Screening", "SCREENING", 650000, 30),
+        ("D-8", "TRAVEL REIMBURSEMENT", 8250, 2),
+        ("M2", "CT CHEST W CONTRAST", 412000, 7),
+        ("Leukapheresis", "COHORT 1: LEUKAPHERESIS", 990000, 5),
+        ("D28", "D28", 120000, 60),
+        ("M3D1", "MONTH 3 DAY 1", 365200, 1),
+        ("D-5", "LYMPHODEPLETION DAY -5", 117600, 10),
+    ]
+    for i, (visit, code, ch, gap) in enumerate(visits13):
+        d = days[i]
+        amount_b = ch if i % 2 == 0 else ch + 5000  # the repeat is caught even at another amount
+        add(
+            "CLN-013",
+            "fire",
+            [
+                I(f"A13{i}", later(d, 5), [L("P1", d, code, charge=ch, visit=visit)]),
+                I(f"B13{i}", later(d, 40 + gap), [L("P1", later(d, gap), code, charge=amount_b, visit=visit)]),
+            ],
+            "PROBABLE",
+        )
+    n13 = [
+        ("same invoice (CLN-010/012 territory)", "same_invoice"),
+        ("different subject", "other_patient"),
+        ("different visit", "other_visit"),
+        ("different item at same visit", "other_item"),
+        ("same date (CLN-001 territory)", "same_date"),
+        ("no visit label (claims)", "no_visit"),
+        ("zero charge", "zero"),
+        ("single invoice, single line", "single"),
+        ("different visit 2", "other_visit"),
+        ("different subject 2", "other_patient"),
+    ]
+    for i, (note, kind) in enumerate(n13):
+        d = days[i]
+        visit, code, ch = "M1D1", "MONTH 1 DAY 1", 183900
+        first = L("P2", d, code, charge=ch, visit=None if kind == "no_visit" else visit)
+        second = L(
+            "P3" if kind == "other_patient" else "P2",
+            d if kind == "same_date" else later(d, 7),
+            "MONTH 1 DAY 2" if kind == "other_item" else ("99213" if kind == "no_visit" else code),
+            charge=0 if kind == "zero" else ch,
+            visit=None if kind == "no_visit" else ("M1D2" if kind == "other_visit" else visit),
+        )
+        if kind == "no_visit":
+            first = L("P2", d, "99213", charge=ch)
+        if kind == "zero":
+            first = L("P2", d, code, charge=0, visit=visit)
+        if kind == "same_invoice":
+            invs = [I(f"N13{i}", later(d, 9), [first, second])]
+        elif kind == "single":
+            invs = [I(f"N13{i}", later(d, 9), [first])]
+        else:
+            invs = [I(f"N13{i}a", later(d, 5), [first]), I(f"N13{i}b", later(d, 30), [second])]
+        add("CLN-013", "none", invs, note=note)
     return out
 
 

@@ -565,6 +565,15 @@ def _flag_filters(
     return " AND ".join(where), p
 
 
+# What a flag compares the record with: another invoice (billed before), lines of the same invoice,
+# or nothing (a limit breached on one record). Cross-invoice flags are reviewed first.
+_SCOPE_SQL = (
+    "(CASE WHEN f.counterpart_invoice_ids IN ('[]', '') THEN 'SINGLE'"
+    " WHEN json(f.counterpart_invoice_ids) = json_array(f.subject_invoice_id) THEN 'WITHIN' ELSE 'ACROSS' END)"
+)
+_SCOPE_ORDER = f"CASE {_SCOPE_SQL} WHEN 'ACROSS' THEN 0 WHEN 'SINGLE' THEN 1 ELSE 2 END"
+
+
 @router.get("/flags", tags=["flags"])
 def flags(
     request: Request,
@@ -577,13 +586,17 @@ def flags(
     sort: str = "priority",
     include_suppressed: bool = False,
     min_cents: int | None = None,
+    scope: Literal["ACROSS", "WITHIN", "SINGLE"] | None = None,
     limit: int = Query(200, le=2000),
     offset: int = 0,
     s: Session = Viewer,
 ) -> dict[str, Any]:
     w, p = _flag_filters(tier, rule, status, party, date_from, date_to, include_suppressed, min_cents)
+    if scope:
+        w += f" AND {_SCOPE_SQL} = ?"
+        p.append(scope)
     order = {
-        "priority": f"{_TIER_ORDER}, f.score DESC, f.amount_at_risk_cents DESC",
+        "priority": f"{_TIER_ORDER}, {_SCOPE_ORDER}, f.score DESC, f.amount_at_risk_cents DESC",
         "amount": "f.amount_at_risk_cents DESC",
         "newest": "f.id DESC",
         "date": "i.invoice_date DESC",
@@ -594,7 +607,7 @@ def flags(
         f"SELECT f.id, f.rule_id, f.tier, f.base_tier, f.score, f.status, f.subject_type, f.subject_id, f.subject_invoice_id,"
         f" f.counterpart_invoice_ids, f.amount_at_risk_cents, f.suppressed_by, f.downgraded_by, f.created_at,"
         f" json_extract(f.evidence,'$.summary') AS summary, json_extract(f.evidence,'$.title') AS title,"
-        f" i.invoice_number_raw AS invoice_number, i.invoice_date, pa.display_name AS party,"
+        f" i.invoice_number_raw AS invoice_number, i.invoice_date, pa.display_name AS party, {_SCOPE_SQL} AS scope,"
         f" (SELECT COUNT(*) FROM flags s WHERE s.subject_invoice_id=f.subject_invoice_id AND s.id<>f.id"
         f"  AND s.counterpart_invoice_ids=f.counterpart_invoice_ids AND s.active=1 AND s.suppressed_by IS NULL"
         f"  AND s.status=f.status) AS sibling_count,"

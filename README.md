@@ -41,7 +41,7 @@ make setup && make demo && make dev     # run the desktop app on synthetic data
 make test                               # engine tests + UI unit tests
 ```
 
-Rules: INV-001…008 (invoice level), CLN-001…012 (clinical and trial-site), SUP-001…006
+Rules: INV-001…008 (invoice level), CLN-001…013 (clinical and trial-site), SUP-001…006
 (suppressions). Every flag carries a machine- and human-readable evidence trail, the
 rule/engine/refdata versions that produced it, and an audited review decision.
 

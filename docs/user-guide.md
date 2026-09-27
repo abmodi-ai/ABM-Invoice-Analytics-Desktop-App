@@ -49,11 +49,19 @@ Drag files onto the Ingest page, or click **Choose files**. Supported formats:
 Dates that could be read two ways (03/04/2026) are never guessed. They are marked **check date**.
 Choose the date order in the mapping wizard.
 
+After each file, the **Billed before?** column answers whether anything on it was already billed on
+another invoice: **Yes**, with links to the matching flags, or **No**, with how many earlier lines for
+the same patients or trial subjects it was checked against. A trial subject billed again for a
+protocol visit (for example Month 1 Day 1) that is already on another invoice is flagged (CLN-013),
+even when the date or amount differs.
+
 Files in a **watched folder** (set by your administrator) are picked up automatically.
 
 ## Reviewing flags (Review queue)
 
-The queue is sorted by tier, then confidence, then amount. For each flag you see:
+The queue is sorted by tier, then flags that match **another invoice** (billed before), then
+confidence and amount. Each flag is labelled **vs. another invoice** or **same invoice**; use
+**Compared with** to show only one kind. For each flag you see:
 
 - **Summary**: one sentence saying what matched.
 - **Side by side**: this record and the earlier record. Fields that **match** are green; fields

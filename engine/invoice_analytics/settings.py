@@ -50,6 +50,7 @@ DEFAULTS: dict[str, Any] = {
     "rules.CLN-010": {"enabled": True, "tier": "PROBABLE"},
     "rules.CLN-011": {"enabled": True, "tier": "PROBABLE", "window_days": 30, "min_charge_cents": 100000},
     "rules.CLN-012": {"enabled": True, "tier": "PROBABLE"},
+    "rules.CLN-013": {"enabled": True, "tier": "PROBABLE"},
     # Suppressions
     "suppress.SUP-001": {"enabled": True, "net_tolerance_cents": 0},
     "suppress.SUP-002": {"enabled": True},

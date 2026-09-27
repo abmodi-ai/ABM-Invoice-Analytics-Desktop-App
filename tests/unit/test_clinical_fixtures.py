@@ -84,7 +84,7 @@ def test_fixture_counts() -> None:
     from collections import Counter
 
     c = Counter((x["rule"], x["expect"]) for x in DATA["cases"])
-    for rule in [f"CLN-{i:03d}" for i in range(1, 13)]:
+    for rule in [f"CLN-{i:03d}" for i in range(1, 14)]:
         assert c[(rule, "fire")] >= 10 and c[(rule, "none")] >= 10, (rule, c[(rule, "fire")], c[(rule, "none")])
 
 

@@ -271,3 +271,36 @@ def test_clean_site_invoice_raises_nothing(engine: Engine) -> None:
         "SELECT rule_id FROM flags WHERE active=1 AND suppressed_by IS NULL AND tier IN ('HARD','PROBABLE')"
     )
     assert strong == []
+
+
+FIRST_VISITS = [
+    ("XYZ-201-1003", "Lymphodepletion Day -5", "07/30/2023", "990.00"),
+    ("XYZ-201-1003", "Month 1 Day 1", "08/05/2023", "1500.00"),
+    ("XYZ-201-1003", "Month 1 Day 2", "08/06/2023", "1900.00"),
+]
+
+
+def test_new_invoice_rebilling_an_earlier_visit_is_flagged(engine: Engine) -> None:
+    first = _ingest(engine, "first.pdf", stacked_site_invoice("500123", FIRST_VISITS))
+    assert first["detection"]["history"]["earlier_lines"] == 0  # nothing earlier for this subject
+    later_rows = [
+        ("XYZ-201-1003", "Month 1 Day 1", "08/12/2023", "1500.00"),  # already billed on 500123 (dated 08/05)
+        ("XYZ-201-1003", "Month 2 Day 1", "09/02/2023", "2600.00"),
+    ]
+    out = _ingest(engine, "second.pdf", stacked_site_invoice("500200", later_rows))
+    h = out["detection"]["history"]
+    assert h["lines"] == 2 and h["patients"] == 1
+    assert h["earlier_lines"] == 3 and h["earlier_invoices"] == 1
+    # the visit repeat leads; CLN-011 (same $1,500 charge within 30 days) flags the same pair
+    assert [r["rule_id"] for r in h["repeats"]] == ["CLN-013", "CLN-011"]
+    assert "M1D1" in h["repeats"][0]["summary"] and "500123" in h["repeats"][0]["summary"]
+
+
+def test_new_invoice_with_only_new_visits_reports_nothing_billed_before(engine: Engine) -> None:
+    _ingest(engine, "first.pdf", stacked_site_invoice("500123", FIRST_VISITS))
+    rows = [
+        ("XYZ-201-1003", "Month 1 Day 28", "09/01/2023", "2568.00"),
+        ("XYZ-201-1003", "Month 2 Day 7", "09/08/2023", "2385.00"),
+    ]
+    h = _ingest(engine, "next.pdf", stacked_site_invoice("500300", rows))["detection"]["history"]
+    assert h["repeats"] == [] and h["earlier_lines"] == 3 and h["patients"] == 1

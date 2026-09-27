@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileUp, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { Badge, Button, Card, Empty, ErrorBox, Input, Modal, PageHeader, Select, Spinner, Table, Td, Th, cn } from "../components/ui";
 import { useAuth } from "../lib/auth";
@@ -97,6 +98,7 @@ export default function IngestPage() {
                 <Th className="text-right">Invoices</Th>
                 <Th className="text-right">Lines</Th>
                 <Th className="text-right">New flags</Th>
+                <Th>Billed before?</Th>
                 <Th>Notes</Th>
                 <Th />
               </tr>
@@ -117,6 +119,9 @@ export default function IngestPage() {
                     <Td className="num text-right">{num(p?.invoice_count)}</Td>
                     <Td className="num text-right">{num(p?.line_count)}</Td>
                     <Td className="num text-right">{num(j.result?.detection?.new_flags)}</Td>
+                    <Td className="max-w-sm text-xs">
+                      <BilledBefore h={j.result?.detection?.history} />
+                    </Td>
                     <Td className="max-w-md text-xs text-ink-2">
                       {j.error}
                       {p?.duplicate_file_of?.length > 0 && <div>Same file was ingested before (flagged INV-002).</div>}
@@ -429,5 +434,38 @@ function CorrectionView({ draftId, onClose }: { draftId: number; onClose: () => 
         </div>
       )}
     </Modal>
+  );
+}
+
+function BilledBefore({ h }: { h?: any }) {
+  if (!h) return <span className="text-ink-3">—</span>;
+  const who = `${num(h.patients)} patient${h.patients === 1 ? "" : "s"}/subject${h.patients === 1 ? "" : "s"}`;
+  if (h.repeats.length > 0) {
+    return (
+      <div className="space-y-1">
+        <Badge tone="warn">
+          Yes: {h.repeats.length} match{h.repeats.length === 1 ? "" : "es"} with earlier invoices
+        </Badge>
+        {h.repeats.slice(0, 3).map((r: any) => (
+          <Link key={r.flag_id} to={`/review/${r.flag_id}`} className="block truncate text-accent-ink hover:underline" title={r.summary}>
+            {r.rule_id}: {r.summary}
+          </Link>
+        ))}
+        {h.repeats.length > 3 && (
+          <Link to="/review?scope=ACROSS" className="block text-accent-ink hover:underline">
+            +{h.repeats.length - 3} more in the review queue
+          </Link>
+        )}
+      </div>
+    );
+  }
+  if (!h.patients) return <span className="text-ink-2">No patient or subject on these lines; invoice-level checks only.</span>;
+  return (
+    <div className="text-ink-2">
+      <Badge tone="good">No</Badge>{" "}
+      {h.earlier_lines > 0
+        ? `Checked ${num(h.lines)} line${h.lines === 1 ? "" : "s"} for ${who} against ${num(h.earlier_lines)} earlier line${h.earlier_lines === 1 ? "" : "s"} on ${num(h.earlier_invoices)} other invoice${h.earlier_invoices === 1 ? "" : "s"}.`
+        : `First invoice for ${who}; nothing earlier to compare with.`}
+    </div>
   );
 }

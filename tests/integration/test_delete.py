@@ -69,3 +69,17 @@ def test_delete_api_is_admin_only(client: TestClient, engine: Engine) -> None:  
     assert client.post("/data/delete-all", headers=admin, json={"confirm": "yes"}).status_code == 400
     assert client.post("/data/delete-all", headers=admin, json={"confirm": "DELETE"}).json()["invoices"] == 1
     assert _count(engine, "invoices") == 0
+
+
+def test_queue_lists_cross_invoice_flags_first_and_filters_by_scope(
+    client: TestClient, engine: Engine  # noqa: F811
+) -> None:
+    _load(engine)
+    admin = _admin(client)
+    items = client.get("/flags", headers=admin).json()["items"]
+    scopes = [i["scope"] for i in items]
+    assert scopes == sorted(scopes, key=["ACROSS", "SINGLE", "WITHIN"].index)  # all PROBABLE here
+    assert {i["rule_id"] for i in items if i["scope"] == "ACROSS"} == {"CLN-011", "CLN-013"}  # screening CT re-billed
+    within = client.get("/flags", headers=admin, params={"scope": "WITHIN"}).json()["items"]
+    assert within and {i["rule_id"] for i in within} <= {"CLN-010", "CLN-012"}
+    assert client.get("/flags", headers=admin, params={"scope": "NOPE"}).status_code == 422
