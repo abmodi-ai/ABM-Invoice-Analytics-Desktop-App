@@ -1,21 +1,27 @@
 ## Download
 
-| File | What it is |
+| Your computer | File |
 |---|---|
-| `ABM-Invoice-Analytics-Setup-x64.exe` | **Most people want this.** Installs for the current user; no administrator rights needed. |
-| `ABM-Invoice-Analytics-x64.msi` | For IT departments deploying to many PCs. Installs for all users. |
-| `SHA256SUMS.txt` | Checksums to verify the download. |
+| Windows 10 / 11 (64-bit) | `ABM-Invoice-Analytics-Setup-x64.exe` |
+| Mac with Apple Silicon, macOS 14+ | `ABM-Invoice-Analytics-macOS-AppleSilicon.dmg` |
+| Linux 64-bit | `ABM-Invoice-Analytics-Linux-x86_64.AppImage` |
+| All | `SHA256SUMS.txt` — checksums to verify the download |
 
-Requires Windows 10 or 11 (64-bit). About 1 GB of free disk space. Everything runs on your
-computer; the app makes no internet connections.
+Each file is the whole app. Everything runs on your computer; the app makes no internet
+connections.
 
 ## First run
 
-The installer is not yet code-signed, so Windows SmartScreen shows **"Windows protected your
-PC"**. Click **More info → Run anyway**. This warning goes away once the installer is signed.
+- **Windows:** the installer is not code-signed yet, so SmartScreen shows "Windows protected your
+  PC". Click **More info → Run anyway**. It installs for your account, no administrator rights.
+- **Mac:** drag the app to Applications. It is not notarized yet: the first time, macOS says it
+  can't verify it. Click **Done**, open **System Settings → Privacy & Security**, click **Open
+  Anyway** and confirm.
+- **Linux:** `chmod +x` the AppImage and run it. Ubuntu 24.04+ needs `sudo apt install libfuse2t64`
+  once.
 
 The app opens straight to the dashboard with an empty database. Drop invoices (PDF, CSV/Excel,
 X12 837/835) on the **Ingest** page and review flags in the **Review** queue. Before using it with
 real patient data, turn on **Settings → Sign-in → Require users to sign in**.
 
-Uninstall from **Settings → Apps**. Your data stays in `%LOCALAPPDATA%\InvoiceAnalytics` unless you delete that folder.
+Full instructions: [README](https://github.com/abmodi-ai/ABM-Invoice-Analytics-Desktop-App#download).

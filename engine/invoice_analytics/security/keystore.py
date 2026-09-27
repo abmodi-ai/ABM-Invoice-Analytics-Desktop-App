@@ -1,14 +1,19 @@
 """Protects the install KeySet at rest.
 
-Windows (production): DPAPI, user scope (CryptProtectData), blob stored in the data dir.
-macOS/Linux (development only): OS keyring via `keyring`.
-`file` mode stores the keys unprotected and exists only for tests and CI.
+Windows: DPAPI, user scope (CryptProtectData), blob stored in the data dir.
+macOS: the login Keychain via `keyring`.
+Linux: the desktop's Secret Service keyring (GNOME Keyring, KWallet) via `keyring`. Minimal desktops
+and servers often have none; there the key is kept in a file readable only by this OS user
+(`file`), and a warning is logged. Once an install has a key file it keeps using it, so a keyring
+that appears later never orphans the database.
+`file` is also the mode used by tests and CI.
 """
 
 from __future__ import annotations
 
 import contextlib
 import ctypes
+import logging
 import os
 import sys
 from pathlib import Path
@@ -65,11 +70,35 @@ def _dpapi(data: bytes, protect: bool) -> bytes:  # pragma: no cover - Windows o
         kernel32.LocalFree(blob_out.pbData)
 
 
+def keyring_usable() -> bool:
+    """True when an OS keyring backend is actually available (not keyring's 'fail' fallback)."""
+    try:
+        import keyring
+        from keyring.backends import fail
+
+        kr = keyring.get_keyring()
+        if isinstance(kr, fail.Keyring) or getattr(kr, "backends", None) == []:
+            return False
+        keyring.get_password(KEYRING_SERVICE, "probe")
+        return True
+    except Exception:  # noqa: BLE001 - no D-Bus, locked or missing keyring: fall back
+        return False
+
+
 class Keystore:
     def __init__(self, data_dir: Path, mode: str = "auto") -> None:
         self.data_dir = data_dir
         if mode == "auto":
-            mode = "dpapi" if sys.platform == "win32" else "keyring"
+            if sys.platform == "win32":
+                mode = "dpapi"
+            elif sys.platform.startswith("linux") and ((data_dir / "keyset.bin").exists() or not keyring_usable()):
+                mode = "file"
+                logging.getLogger("invoice_analytics.keystore").warning(
+                    "no OS keyring available: the database key is protected by file permissions only;"
+                    " use full-disk encryption or install GNOME Keyring/KWallet"
+                )
+            else:
+                mode = "keyring"
         self.mode = mode
         self._account = f"keyset:{data_dir.resolve()}"
 

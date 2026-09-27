@@ -105,10 +105,19 @@ def _watch_parent() -> None:
 
     pid = int(ppid)
 
+    first_parent = os.getppid()  # the shell itself, or `uv` in development
+
+    def gone() -> bool:
+        # POSIX re-parents us the moment our parent dies, even while it is still an unreaped zombie
+        # that pid_exists() would report as alive.
+        if os.name != "nt" and os.getppid() != first_parent:
+            return True
+        return not psutil.pid_exists(pid)
+
     def loop() -> None:
         while True:
             time.sleep(2)
-            if not psutil.pid_exists(pid):
+            if gone():
                 logging.getLogger("invoice_analytics").warning("desktop shell exited; engine stopping")
                 os._exit(0)
 

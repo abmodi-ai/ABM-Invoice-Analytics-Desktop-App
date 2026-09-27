@@ -43,6 +43,7 @@ openapi:         ## regenerate the UI contract
 
 engine-dist:
 	cd engine && uv run pyinstaller invoice-analytics-engine.spec --noconfirm --distpath ../build/engine --workpath ../build/pyi-work
+	uv run python tools/bundle_tesseract.py build/engine/invoice-analytics-engine
 	rm -rf apps/desktop/src-tauri/resources/engine && mkdir -p apps/desktop/src-tauri/resources
 	cp -R build/engine/invoice-analytics-engine apps/desktop/src-tauri/resources/engine
 

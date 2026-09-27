@@ -2,13 +2,14 @@
 
 ## Installation
 
-1. Run the signed `ABM-Invoice-Analytics-x64.msi` (per-machine install).
+1. Install the app for each user: Windows `ABM-Invoice-Analytics-Setup-x64.exe` (silent install:
+   `ABM-Invoice-Analytics-Setup-x64.exe /S`), Mac `.dmg`, or Linux `.AppImage`. See the README.
 2. Start the app. On first run, create the administrator account and **print the recovery key**.
    It is shown once. It is the only way to restore a backup on a different computer.
 3. Import the current reference-data bundle (Reference data → Import signed bundle).
 4. Optionally add a Windows Firewall rule that blocks all network access for the app
    (defence in depth; the app makes no network connections):
-   `New-NetFirewallRule -DisplayName "ABM Invoice Analytics block" -Program "C:\Program Files\ABM Invoice Analytics\engine\invoice-analytics-engine.exe" -Direction Outbound -Action Block`
+   `New-NetFirewallRule -DisplayName "ABM Invoice Analytics block" -Program "$env:LOCALAPPDATA\ABM Invoice Analytics\engine\invoice-analytics-engine.exe" -Direction Outbound -Action Block`
 
 Data locations:
 

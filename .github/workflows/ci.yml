@@ -3,131 +3,195 @@ on:
   push:
   pull_request:
 
+# One job per OS builds, tests and install-tests that OS's download. On a v* tag the release job
+# publishes all three together, and only if all three passed.
+env:
+  IA_EMBEDDER: hashing
+
 jobs:
-  windows:
-    runs-on: windows-latest
+  linux:
+    runs-on: ubuntu-22.04  # oldest supported glibc: the AppImage runs on this and newer distros
     timeout-minutes: 90
-    permissions:
-      contents: write  # publish the GitHub Release on v* tags
-    env:
-      IA_EMBEDDER: hashing
     steps:
       - uses: actions/checkout@v7
-      - name: Release tag matches the app version
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
-        run: |
-          set -euo pipefail
-          conf=$(python -c "import json; print(json.load(open('apps/desktop/src-tauri/tauri.conf.json'))['version'])")
-          [ "${GITHUB_REF_NAME#v}" = "$conf" ] || { echo "tag $GITHUB_REF_NAME does not match app version $conf"; exit 1; }
       - uses: astral-sh/setup-uv@v10.2.0  # no floating major tags since v8
       - uses: actions/setup-node@v7
         with: { node-version: "22", cache: npm, cache-dependency-path: apps/desktop/package-lock.json }
       - uses: dtolnay/rust-toolchain@stable
         with: { components: clippy }
-      - name: Install Tesseract (bundled into the engine dist)
+      - name: System packages (Tauri, AppImage tooling, Tesseract, virtual display)
         run: |
-          choco install tesseract --no-progress -y
-          "C:\Program Files\Tesseract-OCR" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf libfuse2 file xvfb tesseract-ocr tesseract-ocr-eng
       - name: Python deps
-        run: uv sync --frozen || uv sync
+        run: uv sync --frozen
       - name: Frontend deps
         working-directory: apps/desktop
         run: npm ci
       - name: Lint
-        shell: bash  # fail on the first failing command (pwsh only checks the last one)
         run: |
           set -euo pipefail
           uv run ruff check engine tools tests refdata
           uv run black --check engine tools tests refdata
           uv run mypy engine/invoice_analytics
-          cd apps/desktop && npx eslint src && npx tsc -b
+          cd apps/desktop && npx eslint src e2e && npx tsc -b
           cd src-tauri && cargo clippy -- -D warnings
       - name: License gate (runtime deps only)
-        shell: bash
         run: |
           set -euo pipefail
           uv run python tools/license_check.py
           cd apps/desktop && npm run license-check
-      - name: Engine tests (unit, property, fixtures, integration, security, golden)
+      - name: Engine tests
         run: uv run pytest -o addopts="" -m "not perf" --timeout=1800 tests/unit tests/integration tests/golden
-      - name: Network test (engine process opens no non-loopback sockets)
-        run: uv run pytest -o addopts="" -m slow tests/integration/test_security.py -k sockets
       - name: Frontend unit tests
         working-directory: apps/desktop
         run: npx vitest run
+      - name: Engine dist (PyInstaller one-dir) + bundled Tesseract
+        run: |
+          set -euo pipefail
+          (cd engine && uv run pyinstaller invoice-analytics-engine.spec --noconfirm --distpath ../build/engine --workpath ../build/pyi-work)
+          uv run python tools/bundle_tesseract.py build/engine/invoice-analytics-engine
+          rm -rf apps/desktop/src-tauri/resources/engine
+          cp -R build/engine/invoice-analytics-engine apps/desktop/src-tauri/resources/engine
+      - name: Frozen engine smoke test (OCR must use the bundled Tesseract)
+        run: |
+          sudo apt-get remove -y tesseract-ocr
+          uv run python tools/frozen_smoke.py apps/desktop/src-tauri/resources/engine/invoice-analytics-engine
+      - name: Build AppImage
+        working-directory: apps/desktop
+        run: npx tauri build --bundles appimage
+      - name: Install test (run the AppImage, engine health, clean exit)
+        run: xvfb-run -a uv run python tools/install_test.py apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux
+          path: apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+
+  macos:
+    runs-on: macos-14  # Apple Silicon; Homebrew bottles built here run on macOS 14+ (see MACOS_MIN)
+    timeout-minutes: 90
+    env:
+      MACOS_MIN: "14.0"  # must match bundle.macOS.minimumSystemVersion in tauri.conf.json
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: actions/setup-node@v7
+        with: { node-version: "22", cache: npm, cache-dependency-path: apps/desktop/package-lock.json }
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Tesseract (bundled into the engine dist)
+        run: brew install tesseract
+      - name: Python deps
+        run: uv sync --frozen
+      - name: Frontend deps
+        working-directory: apps/desktop
+        run: npm ci
+      - name: Engine tests
+        run: uv run pytest -o addopts="" -m "not perf" --timeout=1800 tests/unit tests/integration tests/golden
+      - name: Engine dist (PyInstaller one-dir) + bundled Tesseract
+        run: |
+          set -euo pipefail
+          (cd engine && uv run pyinstaller invoice-analytics-engine.spec --noconfirm --distpath ../build/engine --workpath ../build/pyi-work)
+          uv run python tools/bundle_tesseract.py build/engine/invoice-analytics-engine
+          rm -rf apps/desktop/src-tauri/resources/engine
+          cp -R build/engine/invoice-analytics-engine apps/desktop/src-tauri/resources/engine
+      - name: Frozen engine smoke test (OCR must use the bundled Tesseract)
+        run: |
+          brew uninstall --ignore-dependencies tesseract
+          uv run python tools/frozen_smoke.py apps/desktop/src-tauri/resources/engine/invoice-analytics-engine
+      - name: Build DMG
+        working-directory: apps/desktop
+        run: npx tauri build --bundles dmg
+        # Ad-hoc signed until an Apple Developer ID is configured; then set APPLE_* secrets to
+        # sign and notarize (Tauri reads them automatically).
+      - name: Install test (mount DMG, copy app, verify signature, launch, engine health, clean exit)
+        run: uv run python tools/install_test.py apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          path: apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: actions/setup-node@v7
+        with: { node-version: "22", cache: npm, cache-dependency-path: apps/desktop/package-lock.json }
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Tesseract (bundled into the engine dist)
+        run: |
+          choco install tesseract --no-progress -y
+          "C:\Program Files\Tesseract-OCR" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Python deps
+        run: uv sync --frozen
+      - name: Frontend deps
+        working-directory: apps/desktop
+        run: npm ci
+      - name: Engine tests
+        run: uv run pytest -o addopts="" -m "not perf" --timeout=1800 tests/unit tests/integration tests/golden
+      - name: Network test (engine process opens no non-loopback sockets)
+        run: uv run pytest -o addopts="" -m slow tests/integration/test_security.py -k sockets
       - name: Performance budgets (250k lines)
         run: uv run python tests/perf/perf_run.py --lines 250000
-      - name: Engine dist (PyInstaller one-dir) + Tesseract
-        shell: pwsh
+      - name: Engine dist (PyInstaller one-dir) + bundled Tesseract
+        shell: bash
         run: |
-          cd engine; uv run pyinstaller invoice-analytics-engine.spec --noconfirm --distpath ../build/engine --workpath ../build/pyi-work; cd ..
-          New-Item -ItemType Directory -Force build/engine/invoice-analytics-engine/tesseract | Out-Null
-          Copy-Item -Recurse "C:/Program Files/Tesseract-OCR/*" build/engine/invoice-analytics-engine/tesseract/
-          Remove-Item -Recurse -Force apps/desktop/src-tauri/resources/engine -ErrorAction SilentlyContinue
-          Copy-Item -Recurse build/engine/invoice-analytics-engine apps/desktop/src-tauri/resources/engine
+          set -euo pipefail
+          (cd engine && uv run pyinstaller invoice-analytics-engine.spec --noconfirm --distpath ../build/engine --workpath ../build/pyi-work)
+          uv run python tools/bundle_tesseract.py build/engine/invoice-analytics-engine
+          rm -rf apps/desktop/src-tauri/resources/engine
+          cp -R build/engine/invoice-analytics-engine apps/desktop/src-tauri/resources/engine
       - name: Frozen engine smoke test (health, setup, digital + scanned PDF + CSV ingest, sweep, audit; DPAPI keystore)
         run: uv run python tools/frozen_smoke.py apps/desktop/src-tauri/resources/engine/invoice-analytics-engine.exe
       - name: SBOM (CycloneDX)
         run: |
           mkdir build/sbom -Force
           uv run cyclonedx-py environment --of JSON -o build/sbom/engine.cdx.json
-      - name: Build installers (MSI + setup.exe)
+      - name: Build setup.exe
         working-directory: apps/desktop
-        run: npx tauri build
+        run: npx tauri build --bundles nsis
         # Unsigned: Windows SmartScreen warns on first run until code signing is set up.
       - name: Install test (silent per-user install, launch, engine health, clean exit, uninstall)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $setup = Get-ChildItem apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
-          "installer: $($setup.Name) ($([math]::Round($setup.Length / 1MB)) MB)"
-          Start-Process $setup.FullName -ArgumentList '/S' -Wait
-          $engine = Get-ChildItem $env:LOCALAPPDATA -Recurse -Depth 3 -Filter invoice-analytics-engine.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $engine) { throw 'engine not found after install' }
-          $root = $engine.Directory.Parent.FullName
-          "installed to: $root"
-          $app = Get-ChildItem $root -Filter *.exe | Where-Object { $_.Name -notmatch 'uninstall' } | Select-Object -First 1
-          $proc = Start-Process $app.FullName -PassThru
-          $healthy = $false
-          for ($i = 0; $i -lt 90 -and -not $healthy; $i++) {
-            Start-Sleep 2
-            foreach ($e in Get-Process invoice-analytics-engine -ErrorAction SilentlyContinue) {
-              foreach ($c in Get-NetTCPConnection -OwningProcess $e.Id -State Listen -ErrorAction SilentlyContinue) {
-                try {
-                  $r = Invoke-WebRequest "http://127.0.0.1:$($c.LocalPort)/health" -UseBasicParsing -TimeoutSec 3
-                  if ($r.StatusCode -eq 200) { $healthy = $true; "engine healthy on port $($c.LocalPort)" }
-                } catch {}
-              }
-            }
-          }
-          if (-not $healthy) { throw 'installed app did not bring up a healthy engine within 180 s' }
-          Stop-Process -Id $proc.Id -Force
-          for ($i = 0; $i -lt 15 -and (Get-Process invoice-analytics-engine -ErrorAction SilentlyContinue); $i++) { Start-Sleep 1 }
-          if (Get-Process invoice-analytics-engine -ErrorAction SilentlyContinue) { throw 'engine outlived the app (parent watchdog)' }
-          Start-Process (Join-Path $root 'uninstall.exe') -ArgumentList '/S' -Wait
-          for ($i = 0; $i -lt 30 -and (Test-Path (Join-Path $root 'engine')); $i++) { Start-Sleep 1 }  # the uninstaller re-launches itself from %TEMP%
-          if (Test-Path (Join-Path $root 'engine')) { throw 'uninstall left the engine behind' }
-          'install test passed'
+        shell: bash
+        run: uv run python tools/install_test.py apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
       - uses: actions/upload-artifact@v7
         with:
-          name: installers
+          name: windows
+          path: apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
+      - uses: actions/upload-artifact@v7
+        with:
+          name: reports
           path: |
-            apps/desktop/src-tauri/target/release/bundle/msi/*.msi
-            apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
             build/sbom/*.json
             tests/perf/out/*.json
             tests/golden/out/*.md
-      - name: Publish GitHub Release (v* tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # publish the GitHub Release
+    steps:
+      - uses: actions/checkout@v7
+      - name: Release tag matches the app version
+        run: |
+          conf=$(python3 -c "import json; print(json.load(open('apps/desktop/src-tauri/tauri.conf.json'))['version'])")
+          [ "${GITHUB_REF_NAME#v}" = "$conf" ] || { echo "tag $GITHUB_REF_NAME does not match app version $conf"; exit 1; }
+      - uses: actions/download-artifact@v7
+        with: { path: dist }
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           ver="${GITHUB_REF_NAME#v}"
           mkdir -p release
-          cp apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe "release/ABM-Invoice-Analytics-Setup-x64.exe"
-          cp apps/desktop/src-tauri/target/release/bundle/msi/*.msi "release/ABM-Invoice-Analytics-x64.msi"
+          # Stable names, so the README's releases/latest/download links always work.
+          cp dist/windows/*-setup.exe release/ABM-Invoice-Analytics-Setup-x64.exe
+          cp dist/macos/*.dmg release/ABM-Invoice-Analytics-macOS-AppleSilicon.dmg
+          cp dist/linux/*.AppImage release/ABM-Invoice-Analytics-Linux-x86_64.AppImage
           (cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
           gh release create "$GITHUB_REF_NAME" release/* --title "ABM Invoice Analytics $ver" --notes-file docs/release-notes.md

@@ -78,16 +78,38 @@ fn engine_command(app: &tauri::AppHandle) -> Command {
         return c;
     }
     let exe = if cfg!(windows) { "invoice-analytics-engine.exe" } else { "invoice-analytics-engine" };
+    // Where installers put bundled resources. Tauri's resource_dir() fails for a macOS app that was
+    // copied out of the build folder (UnknownPath), so the platform locations relative to our own
+    // executable are checked too.
+    let mut dirs: Vec<PathBuf> = Vec::new();
     if let Ok(res) = app.path().resource_dir() {
-        let bundled: PathBuf = res.join("engine").join(exe);
-        if bundled.exists() {
-            let mut c = Command::new(bundled);
-            c.current_dir(res.join("engine"));
-            return c;
+        dirs.push(res);
+    }
+    if let Ok(me) = std::env::current_exe() {
+        if let Some(bin) = me.parent() {
+            dirs.push(bin.join("../Resources")); // macOS: .app/Contents/MacOS -> Contents/Resources
+            dirs.push(bin.to_path_buf()); // Windows: resources sit next to the .exe
+            dirs.push(bin.join("../lib").join(&app.package_info().name)); // Linux: usr/bin -> usr/lib/<app>
         }
     }
-    // Development: run the engine from the repository with uv.
+    if let Ok(appdir) = std::env::var("APPDIR") {
+        dirs.push(PathBuf::from(appdir).join("usr/lib").join(&app.package_info().name)); // AppImage
+    }
+    if let Some(dir) = dirs.iter().map(|d| d.join("engine")).find(|d| d.join(exe).exists()) {
+        eprintln!("engine: {}", dir.join(exe).display());
+        let mut c = Command::new(dir.join(exe));
+        c.current_dir(dir);
+        return c;
+    }
+    if !cfg!(debug_assertions) {
+        // Release builds only ever run the bundled engine; spawning this fails and the window
+        // shows "engine did not start" instead of silently running something else.
+        eprintln!("engine: bundled engine not found in {dirs:?}");
+        return Command::new(exe);
+    }
+    // Development only: run the engine from the repository with uv.
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    eprintln!("engine: development (uv run) in {}", repo.display());
     let mut c = Command::new("uv");
     c.args(["run", "python", "-m", "invoice_analytics"]).current_dir(repo);
     c

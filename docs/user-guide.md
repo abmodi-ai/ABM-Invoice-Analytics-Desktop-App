@@ -9,11 +9,12 @@ ABM Invoice Analytics **flags**; you **decide**. Every flag shows exactly why it
 
 ## Installing
 
-Download `ABM-Invoice-Analytics-Setup-x64.exe` from the
-[latest release](https://github.com/abmodi-ai/ABM-Invoice-Analytics-Desktop-App/releases/latest) and run it. It
-installs for your Windows account without administrator rights. Until the installer is
-code-signed, Windows shows "Windows protected your PC": click **More info → Run anyway**.
-IT departments can deploy the `.msi` instead. The app needs no internet connection.
+Download the file for your computer from the
+[latest release](https://github.com/abmodi-ai/ABM-Invoice-Analytics-Desktop-App/releases/latest): `ABM-Invoice-Analytics-Setup-x64.exe` (Windows),
+`ABM-Invoice-Analytics-macOS-AppleSilicon.dmg` (Mac) or `ABM-Invoice-Analytics-Linux-x86_64.AppImage`
+(Linux). Step-by-step instructions, including the one-time security prompts while the downloads
+are not yet signed by Microsoft and Apple, are in the [README](https://github.com/abmodi-ai/ABM-Invoice-Analytics-Desktop-App#install).
+The app needs no internet connection.
 
 ## Signing in
 

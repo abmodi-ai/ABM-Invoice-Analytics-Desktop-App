@@ -46,6 +46,10 @@ def ocr_png(png: bytes, *, timeout: float = 60.0, psm: int = 6) -> list[OcrWord]
     env = dict(os.environ)
     if getattr(sys, "frozen", False):
         env["TESSDATA_PREFIX"] = str(Path(exe).parent / "tessdata")
+        if sys.platform.startswith("linux"):  # the bundled binary's libraries sit next to it
+            env["LD_LIBRARY_PATH"] = os.pathsep.join(
+                p for p in (str(Path(exe).parent / "lib"), env.get("LD_LIBRARY_PATH")) if p
+            )
     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0  # type: ignore[attr-defined,unused-ignore]
     proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
         [exe, "stdin", "stdout", "-l", "eng", "--psm", str(psm), "tsv"],
