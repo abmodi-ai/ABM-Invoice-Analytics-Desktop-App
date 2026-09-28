@@ -105,7 +105,26 @@ def stop_and_check(app: subprocess.Popen[bytes] | psutil.Process) -> None:
     print("engine stopped with the app")
 
 
+def check_signed(files: list[Path], signer: str) -> None:
+    """Authenticode: every file must carry a valid, timestamped signature from `signer`."""
+    for f in files:
+        ps = (
+            f"$s = Get-AuthenticodeSignature -LiteralPath '{f}'; "
+            '"$($s.Status)|$($s.SignerCertificate.Subject)|$($null -ne $s.TimeStamperCertificate)"'
+        )
+        out = subprocess.run(  # noqa: S603, S607
+            ["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, check=True
+        ).stdout.strip()
+        status, subject, stamped = (out.split("|") + ["", "", ""])[:3]
+        if status != "Valid" or f"CN={signer}" not in subject or stamped != "True":
+            raise SystemExit(f"{f.name}: signature {status!r}, subject {subject!r}, timestamped {stamped}")
+        print(f"signed by {signer}: {f.name}")
+
+
 def test_windows(setup: Path) -> None:
+    signer = os.environ.get("EXPECT_SIGNER")
+    if signer:
+        check_signed([setup], signer)
     subprocess.run([str(setup), "/S"], check=True)  # noqa: S603
     base = Path(os.environ["LOCALAPPDATA"])
     engine = next(base.glob(f"*/engine/{ENGINE}.exe"), None) or next(base.glob(f"**/{ENGINE}.exe"), None)
@@ -114,6 +133,8 @@ def test_windows(setup: Path) -> None:
     root = engine.parent.parent
     print(f"installed to: {root}")
     app = next(e for e in root.glob("*.exe") if "uninstall" not in e.name.lower())
+    if signer:
+        check_signed([app, engine], signer)
     proc = subprocess.Popen([str(app)])  # noqa: S603
     wait_healthy(proc)
     stop_and_check(proc)

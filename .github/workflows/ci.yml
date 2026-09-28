@@ -114,6 +114,15 @@ jobs:
   windows:
     runs-on: windows-latest
     timeout-minutes: 90
+    # Release tags are signed with Azure Artifact Signing (publisher: A.B. Modi LLC) once the
+    # certificate profile is configured (repo variable ARTIFACT_SIGNING_PROFILE). Signing signs in
+    # through the `release` environment's federated credential; no secret is stored.
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && vars.ARTIFACT_SIGNING_PROFILE != '' && 'release' || '' }}
+    permissions:
+      contents: read
+      id-token: write  # OIDC token for the Azure federated credential
+    env:
+      SIGN: ${{ startsWith(github.ref, 'refs/tags/v') && vars.ARTIFACT_SIGNING_PROFILE != '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
@@ -149,12 +158,52 @@ jobs:
         run: |
           mkdir build/sbom -Force
           uv run cyclonedx-py environment --of JSON -o build/sbom/engine.cdx.json
-      - name: Build setup.exe
+      - name: Build the app (not yet packaged)
         working-directory: apps/desktop
-        run: npx tauri build --bundles nsis
-        # Unsigned: Windows SmartScreen warns on first run until code signing is set up.
+        run: npx tauri build --no-bundle
+      - name: Azure sign-in (release tags)
+        if: env.SIGN == 'true'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Sign the app, engine and bundled programs (release tags)
+        if: env.SIGN == 'true'
+        uses: azure/artifact-signing-action@v2.0.0
+        with:
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\apps\desktop\src-tauri\target\release\invoice-analytics-desktop.exe
+          files-folder: ${{ github.workspace }}\apps\desktop\src-tauri\resources\engine
+          files-folder-filter: exe,dll,pyd
+          files-folder-recurse: true
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: ABM Invoice Analytics
+      - name: Package setup.exe
+        working-directory: apps/desktop
+        run: npx tauri bundle --bundles nsis
+      - name: Sign setup.exe (release tags)
+        if: env.SIGN == 'true'
+        uses: azure/artifact-signing-action@v2.0.0
+        with:
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\apps\desktop\src-tauri\target\release\bundle\nsis
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: ABM Invoice Analytics
       - name: Install test (silent per-user install, launch, engine health, clean exit, uninstall)
         shell: bash
+        env:
+          # On signed releases the test also requires valid signatures by this publisher.
+          EXPECT_SIGNER: ${{ env.SIGN == 'true' && 'A.B. Modi LLC' || '' }}
         run: uv run python tools/install_test.py apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
       - uses: actions/upload-artifact@v7
         with:
