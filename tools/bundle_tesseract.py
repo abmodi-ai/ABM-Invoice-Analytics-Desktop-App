@@ -29,6 +29,7 @@ import tarfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+FALLBACK_LICENCES = ROOT / "tools" / "third_party_licenses"  # for packages that ship no licence file
 LICENSE_NAME = re.compile(r"(licen[cs]e|copying|notice|copyright)", re.I)  # e.g. leptonica-license.txt
 
 # Always provided by the OS; bundling them breaks programs on other distros. libstdc++ is bundled on
@@ -176,8 +177,9 @@ def licences_macos(sources: list[Path], out: Path) -> list[str]:
                     if m.isfile() and len(parts) <= 2 and LICENSE_NAME.search(parts[-1]):
                         (out / formula).mkdir(parents=True, exist_ok=True)
                         (out / formula / parts[-1]).write_bytes(tar.extractfile(m).read())  # type: ignore[union-attr]
-        if (out / formula).is_dir():
-            found.append(formula)
+        if not (out / formula).is_dir() and not _copy_licence_files(FALLBACK_LICENCES / formula, out / formula):
+            raise SystemExit(f"no licence text found for {formula}; add it to {FALLBACK_LICENCES}")
+        found.append(formula)
     return found
 
 
@@ -196,8 +198,8 @@ def licences_linux(sources: list[Path], out: Path) -> list[str]:
             (out / pkg).mkdir(parents=True, exist_ok=True)
             shutil.copy2(copyright_file, out / pkg / "copyright")
             found.append(pkg)
-        else:
-            print(f"warning: no licence file found for {path.name}")
+        elif not (pkg and _copy_licence_files(FALLBACK_LICENCES / pkg, out / pkg)):
+            raise SystemExit(f"no licence text found for {path.name} (package {pkg}); add it to {FALLBACK_LICENCES}")
     return sorted(set(found))
 
 
@@ -209,13 +211,21 @@ def licences_windows(sources: list[Path], out: Path) -> list[str]:
     owners = run(
         str(root / "usr" / "bin" / "bash.exe"), "-lc", "pacman -Qqo " + " ".join(f"'{p}'" for p in msys_paths)
     ).split()
-    found = []
+    found, missing = [], []
     for pkg in sorted(set(owners)):
         name = pkg.removeprefix(MSYS_PREFIX)
-        if _copy_licence_files(root / "ucrt64" / "share" / "licenses" / name, out / name):
+        shared = root / "ucrt64" / "share" / "licenses"
+        candidates = [
+            shared / name,
+            shared / name.rstrip("0123456789"),
+            FALLBACK_LICENCES / name,
+        ]  # openjpeg2 -> openjpeg
+        if any(_copy_licence_files(c, out / name) for c in candidates):
             found.append(name)
         else:
-            print(f"warning: no licence file found for {pkg}")
+            missing.append(pkg)
+    if missing:
+        raise SystemExit(f"no licence text found for: {', '.join(missing)} (add it to {FALLBACK_LICENCES})")
     return found
 
 
