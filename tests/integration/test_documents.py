@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import shutil
 
 import pytest
@@ -105,7 +106,9 @@ def test_arithmetic_mismatch_goes_to_review_then_learns_template(engine: Engine)
     assert engine.db.scalar("SELECT invoice_number_raw FROM invoices ORDER BY id DESC LIMIT 1") == "HMS-556"
 
 
-@pytest.mark.skipif(shutil.which("tesseract") is None, reason="tesseract not installed")
+@pytest.mark.skipif(
+    shutil.which("tesseract") is None and not os.environ.get("IA_TESSERACT"), reason="tesseract not installed"
+)
 def test_scanned_pdf_uses_ocr(engine: Engine) -> None:
     pdf = make_pdf("HMS-77120", "03/14/2026", LINES_OK, "475.75", scanned=True)
     out = ingest_bytes(engine, "scan.pdf", pdf, options={"_in_process": True})

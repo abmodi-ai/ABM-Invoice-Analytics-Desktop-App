@@ -5,7 +5,9 @@
 Result: <engine>/tesseract/ with the tesseract binary, the libraries it needs, and
 tessdata/eng.traineddata. The engine finds it there (ingest/ocr/tesseract.py).
 
-- Windows: copies the UB-Mannheim install (choco install tesseract), which is already self-contained.
+- Windows: copies MSYS2's UCRT64 tesseract.exe (mingw-w64-ucrt-x86_64-tesseract-ocr) and only the
+  DLLs it loads (found by walking PE imports with objdump), not the training tools and their GUI
+  libraries. MSYS2_ROOT points at the MSYS2 install (default C:/msys64).
 - macOS: copies Homebrew's tesseract and every non-system dylib it loads, rewrites their load paths
   to the bundle, and ad-hoc signs them (Apple Silicon refuses to run modified unsigned code).
 - Linux: copies the distro's tesseract and every library it loads except the C runtime; the engine
@@ -51,12 +53,30 @@ def find_tessdata(binary: Path) -> Path:
     raise SystemExit("eng.traineddata not found; install the English language data")
 
 
-def bundle_windows(dest: Path) -> Path:
-    src = Path(os.environ.get("TESSERACT_HOME", r"C:\Program Files\Tesseract-OCR"))
-    if not (src / "tesseract.exe").is_file():
-        raise SystemExit(f"tesseract.exe not found in {src}")
-    shutil.copytree(src, dest, dirs_exist_ok=True)
-    return dest / "tesseract.exe"
+MSYS_PREFIX = "mingw-w64-ucrt-x86_64-"
+
+
+def _msys_root() -> Path:
+    return Path(os.environ.get("MSYS2_ROOT") or r"C:\msys64")
+
+
+def bundle_windows(dest: Path) -> tuple[Path, list[Path]]:
+    bin_dir = _msys_root() / "ucrt64" / "bin"
+    exe = bin_dir / "tesseract.exe"
+    if not exe.is_file():
+        raise SystemExit(f"{exe} not found (pacman -S {MSYS_PREFIX}tesseract-ocr {MSYS_PREFIX}binutils)")
+    needed: dict[str, Path] = {}
+    todo = [exe]
+    while todo:
+        for name in re.findall(r"DLL Name: (\S+)", run(str(bin_dir / "objdump.exe"), "-p", str(todo.pop()))):
+            dll = bin_dir / name  # Windows' own DLLs (KERNEL32, ucrtbase, ...) are not in ucrt64/bin
+            if name.lower() not in needed and dll.is_file():
+                needed[name.lower()] = dll
+                todo.append(dll)
+    shutil.copy2(exe, dest / exe.name)
+    for dll in needed.values():
+        shutil.copy2(dll, dest / dll.name)
+    return dest / exe.name, [exe, *needed.values()]
 
 
 def _mac_deps(path: Path) -> list[str]:
@@ -181,17 +201,22 @@ def licences_linux(sources: list[Path], out: Path) -> list[str]:
     return sorted(set(found))
 
 
-def licences_windows(dest: Path, out: Path) -> list[str]:
-    """The UB-Mannheim build keeps its licences inside the copied install; index them."""
-    files = [f for f in dest.rglob("*") if f.is_file() and LICENSE_NAME.search(f.name)]
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "WHERE.txt").write_text(
-        "Tesseract and its libraries ship their licence texts inside ../tesseract/:\n"
-        + "\n".join(str(f.relative_to(dest.parent)) for f in files)
-        + "\n",
-        encoding="utf-8",
-    )
-    return [str(f.relative_to(dest)) for f in files]
+def licences_windows(sources: list[Path], out: Path) -> list[str]:
+    """MSYS2 installs every package's licence as /ucrt64/share/licenses/<name>/; pacman says which
+    package each bundled file came from."""
+    root = _msys_root()
+    msys_paths = ["/" + p.relative_to(root).as_posix() for p in sources]
+    owners = run(
+        str(root / "usr" / "bin" / "bash.exe"), "-lc", "pacman -Qqo " + " ".join(f"'{p}'" for p in msys_paths)
+    ).split()
+    found = []
+    for pkg in sorted(set(owners)):
+        name = pkg.removeprefix(MSYS_PREFIX)
+        if _copy_licence_files(root / "ucrt64" / "share" / "licenses" / name, out / name):
+            found.append(name)
+        else:
+            print(f"warning: no licence file found for {pkg}")
+    return found
 
 
 def write_licences(engine: Path, dest: Path, sources: list[Path]) -> None:
@@ -202,13 +227,13 @@ def write_licences(engine: Path, dest: Path, sources: list[Path]) -> None:
     for name in ("LICENSE", "NOTICE"):
         shutil.copy2(ROOT / name, app / name)
     if sys.platform == "win32":
-        found = licences_windows(dest, out / "tesseract-and-libraries")
+        found = licences_windows(sources, out)
     elif sys.platform == "darwin":
         found = licences_macos(sources, out)
     else:
         found = licences_linux(sources, out)
     text = " ".join(found).lower()
-    required = ("tesseract", "lept") if sys.platform != "win32" else ()
+    required = ("tesseract", "lept")
     missing = [n for n in required if n not in text]
     if not found or missing:
         raise SystemExit(f"licence text not found for: {', '.join(missing)} (found: {found})")
@@ -245,17 +270,16 @@ def main() -> int:
     dest = engine / "tesseract"
     shutil.rmtree(dest, ignore_errors=True)
     dest.mkdir(parents=True)
-    sources: list[Path] = []
     if sys.platform == "win32":
-        binary = bundle_windows(dest)
+        binary, sources = bundle_windows(dest)
     else:
         binary, sources = bundle_macos(dest) if sys.platform == "darwin" else bundle_linux(dest)
-        data = dest / "tessdata"
-        data.mkdir(exist_ok=True)
-        src = find_tessdata(Path(shutil.which("tesseract") or ""))
-        for name in ("eng.traineddata", "osd.traineddata"):
-            if (src / name).is_file():
-                shutil.copy2(src / name, data / name)
+    data = dest / "tessdata"
+    data.mkdir(exist_ok=True)
+    src = find_tessdata(sources[0])  # tessdata sits beside the binary's install prefix
+    for name in ("eng.traineddata", "osd.traineddata"):
+        if (src / name).is_file():
+            shutil.copy2(src / name, data / name)
     env = {"TESSDATA_PREFIX": str(dest / "tessdata"), "PATH": os.environ.get("PATH", "")}
     if sys.platform.startswith("linux"):
         env["LD_LIBRARY_PATH"] = str(dest / "lib")
