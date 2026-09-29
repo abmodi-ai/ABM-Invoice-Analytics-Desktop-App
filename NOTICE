@@ -1,0 +1,16 @@
+ABM Invoice Analytics
+Copyright 2026 A.B. Modi LLC
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The downloadable installers also contain third-party software, each under its
+own licence:
+
+- Tesseract OCR (https://github.com/tesseract-ocr/tesseract), Apache License 2.0,
+  and the libraries it uses, including Leptonica (BSD 2-Clause).
+- The Python runtime (Python Software Foundation License) and the Python
+  packages listed in the release's software bill of materials
+  (build/sbom/engine.cdx.json in CI), all under permissive licences checked by
+  tools/license_check.py.
+- Tauri (MIT or Apache-2.0) and the JavaScript and Rust packages it is built
+  from, checked by the desktop app's license-check script.

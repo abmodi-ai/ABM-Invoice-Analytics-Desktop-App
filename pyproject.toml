@@ -2,6 +2,7 @@
 name = "invoice-analytics-engine"
 version = "0.3.0"
 description = "ABM Invoice Analytics detection engine (offline)"
+license = "Apache-2.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115",

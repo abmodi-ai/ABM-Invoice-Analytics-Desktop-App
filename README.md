@@ -75,3 +75,8 @@ Windows, macOS and Linux machine. Only when all three pass does it publish the G
 |---|---|
 | Security & HIPAA mapping | [docs/security.md](docs/security.md) |
 | Guides | [user](docs/user-guide.md) · [admin](docs/admin-guide.md) · [reference-data runbook](docs/runbook-refdata.md) · [developer](docs/dev.md) |
+
+## Licence
+
+Apache License 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE). Copyright 2026 A.B. Modi LLC.
+The installers also bundle third-party software under its own licences, listed in NOTICE.
