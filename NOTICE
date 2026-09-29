@@ -7,7 +7,9 @@ The downloadable installers also contain third-party software, each under its
 own licence:
 
 - Tesseract OCR (https://github.com/tesseract-ocr/tesseract), Apache License 2.0,
-  and the libraries it uses, including Leptonica (BSD 2-Clause).
+  and the libraries it uses, including Leptonica (BSD 2-Clause). Their licence
+  texts ship with every installer, in the app's engine/licenses/ folder
+  (collected by tools/bundle_tesseract.py).
 - The Python runtime (Python Software Foundation License) and the Python
   packages listed in the release's software bill of materials
   (build/sbom/engine.cdx.json in CI), all under permissive licences checked by

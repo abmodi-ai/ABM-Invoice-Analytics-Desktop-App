@@ -10,6 +10,9 @@ tessdata/eng.traineddata. The engine finds it there (ingest/ocr/tesseract.py).
   to the bundle, and ad-hoc signs them (Apple Silicon refuses to run modified unsigned code).
 - Linux: copies the distro's tesseract and every library it loads except the C runtime; the engine
   sets LD_LIBRARY_PATH to the bundle when it runs OCR.
+It also copies the licence texts of Tesseract and of every library bundled with it into
+<engine>/licenses/ (Apache-2.0 and the BSD-style licences require them to travel with every copy),
+together with this app's own LICENSE and NOTICE, and fails if Tesseract's or Leptonica's is missing.
 Finally runs the bundled binary to check it starts and lists the English language data.
 """
 
@@ -20,7 +23,11 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+LICENSE_NAME = re.compile(r"(licen[cs]e|copying|notice|copyright)", re.I)  # e.g. leptonica-license.txt
 
 # Always provided by the OS; bundling them breaks programs on other distros. libstdc++ is bundled on
 # purpose: tesseract needs the version it was built against, which older distros may lack.
@@ -69,7 +76,7 @@ def _resolve_mac(dep: str, loader: Path) -> Path:
     return Path(dep).resolve()
 
 
-def bundle_macos(dest: Path) -> Path:
+def bundle_macos(dest: Path) -> tuple[Path, list[Path]]:
     found = shutil.which("tesseract")
     if not found:
         raise SystemExit("tesseract not found (brew install tesseract)")
@@ -80,6 +87,7 @@ def bundle_macos(dest: Path) -> Path:
     shutil.copy2(src, binary)
     todo: list[tuple[Path, Path]] = [(binary, src)]  # (copy to patch, original it came from)
     copied: dict[str, Path] = {}
+    originals: list[Path] = []
     while todo:
         target, original = todo.pop()
         os.chmod(target, 0o755)
@@ -88,6 +96,7 @@ def bundle_macos(dest: Path) -> Path:
             name = real.name
             if name not in copied:
                 copied[name] = libs / name
+                originals.append(real)
                 shutil.copy2(real, copied[name])
                 os.chmod(copied[name], 0o755)
                 run("install_name_tool", "-id", f"@loader_path/{name}", str(copied[name]))
@@ -96,10 +105,10 @@ def bundle_macos(dest: Path) -> Path:
             run("install_name_tool", "-change", dep, ref, str(target))
     for f in [binary, *copied.values()]:
         run("codesign", "--force", "--sign", "-", str(f))
-    return binary
+    return binary, [src, *originals]
 
 
-def bundle_linux(dest: Path) -> Path:
+def bundle_linux(dest: Path) -> tuple[Path, list[Path]]:
     found = shutil.which("tesseract")
     if not found:
         raise SystemExit("tesseract not found (apt install tesseract-ocr)")
@@ -107,12 +116,103 @@ def bundle_linux(dest: Path) -> Path:
     lib.mkdir(parents=True, exist_ok=True)
     binary = dest / "tesseract"
     shutil.copy2(Path(found).resolve(), binary)
+    sources = [Path(found)]
     for line in run("ldd", str(binary)).splitlines():
         m = re.match(r"\s*(\S+) => (\S+)", line)
         if not m or LINUX_SYSTEM_LIBS.match(m.group(1)):
             continue
         shutil.copy2(Path(m.group(2)).resolve(), lib / m.group(1))
-    return binary
+        sources.append(Path(m.group(2)))
+    return binary, sources
+
+
+def _copy_licence_files(src_dir: Path, out: Path) -> int:
+    n = 0
+    for f in sorted(src_dir.iterdir()) if src_dir.is_dir() else []:
+        if f.is_file() and LICENSE_NAME.search(f.name):
+            out.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, out / f.name)
+            n += 1
+    return n
+
+
+def licences_macos(sources: list[Path], out: Path) -> list[str]:
+    """Licence files from each Homebrew keg (Cellar/<formula>/<version>/); for a keg that ships
+    none (e.g. leptonica), from the formula's source archive."""
+    found = []
+    kegs = set()
+    for p in sources:
+        if "Cellar" in p.parts:
+            i = p.parts.index("Cellar")
+            kegs.add(Path(*p.parts[: i + 3]))  # .../Cellar/<formula>/<version>
+    for keg in sorted(kegs):
+        formula = keg.parent.name
+        if not _copy_licence_files(keg, out / formula):
+            run("brew", "fetch", "--build-from-source", formula)
+            archive = Path(run("brew", "--cache", "--build-from-source", formula).strip())
+            with tarfile.open(archive) as tar:
+                for m in tar.getmembers():
+                    parts = Path(m.name).parts
+                    if m.isfile() and len(parts) <= 2 and LICENSE_NAME.search(parts[-1]):
+                        (out / formula).mkdir(parents=True, exist_ok=True)
+                        (out / formula / parts[-1]).write_bytes(tar.extractfile(m).read())  # type: ignore[union-attr]
+        if (out / formula).is_dir():
+            found.append(formula)
+    return found
+
+
+def licences_linux(sources: list[Path], out: Path) -> list[str]:
+    """Debian/Ubuntu: every package's licence is /usr/share/doc/<package>/copyright."""
+    found = []
+    for path in sources:
+        pkg = None
+        for cand in {str(path), str(path.resolve()), str(path).replace("/usr/lib/", "/lib/", 1)}:
+            r = subprocess.run(["dpkg", "-S", cand], capture_output=True, text=True)  # noqa: S603, S607
+            if r.returncode == 0:
+                pkg = r.stdout.split(":", 1)[0].strip()
+                break
+        copyright_file = Path("/usr/share/doc") / (pkg or "") / "copyright"
+        if pkg and copyright_file.is_file():
+            (out / pkg).mkdir(parents=True, exist_ok=True)
+            shutil.copy2(copyright_file, out / pkg / "copyright")
+            found.append(pkg)
+        else:
+            print(f"warning: no licence file found for {path.name}")
+    return sorted(set(found))
+
+
+def licences_windows(dest: Path, out: Path) -> list[str]:
+    """The UB-Mannheim build keeps its licences inside the copied install; index them."""
+    files = [f for f in dest.rglob("*") if f.is_file() and LICENSE_NAME.search(f.name)]
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "WHERE.txt").write_text(
+        "Tesseract and its libraries ship their licence texts inside ../tesseract/:\n"
+        + "\n".join(str(f.relative_to(dest.parent)) for f in files)
+        + "\n",
+        encoding="utf-8",
+    )
+    return [str(f.relative_to(dest)) for f in files]
+
+
+def write_licences(engine: Path, dest: Path, sources: list[Path]) -> None:
+    out = engine / "licenses"
+    shutil.rmtree(out, ignore_errors=True)
+    app = out / "ABM-Invoice-Analytics"
+    app.mkdir(parents=True)
+    for name in ("LICENSE", "NOTICE"):
+        shutil.copy2(ROOT / name, app / name)
+    if sys.platform == "win32":
+        found = licences_windows(dest, out / "tesseract-and-libraries")
+    elif sys.platform == "darwin":
+        found = licences_macos(sources, out)
+    else:
+        found = licences_linux(sources, out)
+    text = " ".join(found).lower()
+    required = ("tesseract", "lept") if sys.platform != "win32" else ()
+    missing = [n for n in required if n not in text]
+    if not found or missing:
+        raise SystemExit(f"licence text not found for: {', '.join(missing)} (found: {found})")
+    print(f"licence texts for {len(found)} bundled components -> {out.relative_to(engine)}/")
 
 
 def _vers(v: str) -> tuple[int, ...]:
@@ -145,10 +245,11 @@ def main() -> int:
     dest = engine / "tesseract"
     shutil.rmtree(dest, ignore_errors=True)
     dest.mkdir(parents=True)
+    sources: list[Path] = []
     if sys.platform == "win32":
         binary = bundle_windows(dest)
     else:
-        binary = bundle_macos(dest) if sys.platform == "darwin" else bundle_linux(dest)
+        binary, sources = bundle_macos(dest) if sys.platform == "darwin" else bundle_linux(dest)
         data = dest / "tessdata"
         data.mkdir(exist_ok=True)
         src = find_tessdata(Path(shutil.which("tesseract") or ""))
@@ -163,6 +264,7 @@ def main() -> int:
     ).stdout
     if "eng" not in langs.split():
         raise SystemExit(f"bundled tesseract does not see eng.traineddata:\n{langs}")
+    write_licences(engine, dest, sources)
     if sys.platform == "darwin" and os.environ.get("MACOS_MIN"):  # set by the release build
         check_macos_minimum(engine, os.environ["MACOS_MIN"])
     size = sum(f.stat().st_size for f in dest.rglob("*") if f.is_file()) / 1e6
