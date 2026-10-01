@@ -25,8 +25,20 @@ def _chunks(ids: list[int], n: int = 500) -> list[list[int]]:
     return [ids[i : i + n] for i in range(0, len(ids), n)]
 
 
-def delete_invoices(eng: Engine, invoice_ids: list[int] | None, *, user_id: int | None) -> dict[str, Any]:
-    """Delete the given invoices, or every invoice and document when `invoice_ids` is None."""
+def delete_invoices(
+    eng: Engine,
+    invoice_ids: list[int] | None,
+    *,
+    user_id: int | None,
+    audit_action: str | None = None,
+    keep_documents: bool = False,
+    drop_empty_parties: bool = False,
+) -> dict[str, Any]:
+    """Delete the given invoices, or every invoice and document when `invoice_ids` is None.
+
+    `keep_documents` leaves the source documents (and their correction drafts) in place, and
+    `drop_empty_parties` also removes vendors left with no invoices; both are used when an upload
+    is held back as a possible duplicate and must leave no trace until the user confirms it."""
     everything = invoice_ids is None
     counts: dict[str, int] = {}
     with eng.db.tx() as c:
@@ -47,6 +59,13 @@ def delete_invoices(eng: Engine, invoice_ids: list[int] | None, *, user_id: int 
             ).fetchall()
             if everything or r["s"] in wanted or _touches(r["cp"], wanted)
         ]
+        party_ids = sorted(
+            {
+                r["party_id"]
+                for ch in _chunks(ids)
+                for r in c.execute(f"SELECT party_id FROM invoices WHERE id IN ({_in(ch)})", ch)
+            }
+        )
         doc_ids = sorted(
             {
                 r["document_id"]
@@ -78,6 +97,8 @@ def delete_invoices(eng: Engine, invoice_ids: list[int] | None, *, user_id: int 
         counts["invoices"] = n
         if everything:  # documents still waiting for correction have no invoice yet
             doc_ids = [r["id"] for r in c.execute("SELECT id FROM documents").fetchall()]
+        if keep_documents:
+            doc_ids = []
         n = 0
         for ch in _chunks(doc_ids):
             keep = {
@@ -106,13 +127,17 @@ def delete_invoices(eng: Engine, invoice_ids: list[int] | None, *, user_id: int 
             )
             c.execute(f"DELETE FROM patients WHERE id IN ({_in(ch)})", ch)
         counts["patients"] = len(orphans)
-        if everything:  # vendors with no invoices left, unless a learned PDF layout still points at them
+        if everything or (drop_empty_parties and party_ids):
+            # vendors with no invoices left, unless a learned PDF layout still points at them
+            only = "" if everything else f" AND id IN ({_in(party_ids)})"
             parties = [
                 r["id"]
                 for r in c.execute(
                     "SELECT id FROM parties WHERE id NOT IN (SELECT party_id FROM invoices)"
                     " AND id NOT IN (SELECT party_id FROM vendor_templates WHERE party_id IS NOT NULL)"
                     " AND id NOT IN (SELECT source_party_id FROM patient_source_ids WHERE source_party_id IS NOT NULL)"
+                    + only,
+                    [] if everything else party_ids,
                 ).fetchall()
             ]
             for ch in _chunks(parties):
@@ -126,7 +151,7 @@ def delete_invoices(eng: Engine, invoice_ids: list[int] | None, *, user_id: int 
             counts["parties"] = len(parties)
         audit.record(
             eng.db,
-            "DATA_DELETE_ALL" if everything else "INVOICE_DELETE",
+            audit_action or ("DATA_DELETE_ALL" if everything else "INVOICE_DELETE"),
             user_id=user_id,
             entity_type="invoice",
             entity_id=None if everything else ",".join(map(str, ids)),
@@ -135,7 +160,10 @@ def delete_invoices(eng: Engine, invoice_ids: list[int] | None, *, user_id: int 
         )
     store = eng._store
     if store is not None and store.loaded:  # otherwise it loads fresh on the next detection run
-        store.load_all()
+        if everything:
+            store.load_all()
+        else:
+            store.upsert_invoices(ids)  # rows gone from the database are dropped from the store
     return counts
 
 

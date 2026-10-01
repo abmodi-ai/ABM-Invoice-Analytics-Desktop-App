@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, download } from "../api/client";
 import { Badge, Button, Card, Empty, ErrorBox, Input, Kbd, Select, Spinner, Textarea, TierBadge, cn } from "../components/ui";
+import { DuplicateLabel, countPossibleDuplicates, duplicateRowClass, isPossibleDuplicate } from "../components/duplicates";
 import { useAuth } from "../lib/auth";
 import { display, money, num } from "../lib/format";
 
@@ -301,6 +302,7 @@ function LinesTable({ inv, lineIds, tone, showAll }: { inv: any; lineIds: Set<nu
         <thead>
           <tr className="text-left text-ink-2">
             <th className="py-1">#</th>
+            <th>Possible duplicate</th>
             <th>Patient</th>
             <th>DOS</th>
             {hasVisits && <th>Visit</th>}
@@ -315,8 +317,14 @@ function LinesTable({ inv, lineIds, tone, showAll }: { inv: any; lineIds: Set<nu
           {rows.map((li: any) => {
             const hit = lineIds.has(li.id);
             return (
-              <tr key={li.id} className={cn("border-t border-border", hit && showAll && "outline outline-1 outline-accent")}>
+              <tr
+                key={li.id}
+                className={cn("border-t border-border", isPossibleDuplicate(li) && duplicateRowClass, hit && showAll && "outline outline-1 outline-accent")}
+              >
                 <td className="py-1">{li.line_no}</td>
+                <td>
+                  <DuplicateLabel dups={li.duplicates} />
+                </td>
                 <td className={cn(hit && tone("patient_cluster"))}>{li.patient_name ?? "—"}</td>
                 <td className={cn(hit && tone("dos"))}>{li.dos_from}</td>
                 {hasVisits && <td className={cn(hit && tone("visit"))}>{li.visit_label ?? "—"}</td>}
@@ -331,6 +339,15 @@ function LinesTable({ inv, lineIds, tone, showAll }: { inv: any; lineIds: Set<nu
         </tbody>
       </table>
     </div>
+  );
+}
+
+function DupCount({ lines }: { lines: any[] }) {
+  const n = countPossibleDuplicates(lines);
+  return (
+    <p className={cn("mt-2 text-xs", n ? "font-medium text-diff-ink" : "text-ink-3")}>
+      {n ? `${n} of ${lines.length} line${lines.length === 1 ? "" : "s"} may be duplicates (shaded)` : "No possible duplicate lines"}
+    </p>
   );
 }
 
@@ -423,6 +440,7 @@ function SideBySide({ fl }: { fl: any }) {
             ) : (
               <>
                 <InvoiceHeader inv={inv} tone={tone} />
+                <DupCount lines={inv.lines} />
                 <LinesTable inv={inv} lineIds={lineIds} tone={tone} showAll={showAll || !lineFlag} />
               </>
             )}

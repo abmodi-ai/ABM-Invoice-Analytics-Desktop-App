@@ -45,6 +45,7 @@ class IngestOutcome:
     detection: dict[str, Any] | None
     remittances_applied: int = 0
     seconds: float = 0.0
+    held: dict[str, Any] | None = None  # set when the upload was held back as a possible duplicate
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -55,6 +56,7 @@ class IngestOutcome:
             "detection": self.detection,
             "remittances_applied": self.remittances_applied,
             "seconds": round(self.seconds, 3),
+            "held": self.held,
             "meta": {k: v for k, v in self.parse.meta.items() if k not in ("remittances", "draft_fields")},
         }
 
@@ -176,7 +178,67 @@ def ingest_bytes(
             )
     if detect and pres.invoice_ids:
         det = run_incremental(eng, pres, user_id)
+        if options.get("hold_duplicates") and not options.get("confirm_duplicates"):
+            held = hold_if_billed_before(eng, pres.invoice_ids, det, user_id=user_id)
+            if held:
+                return IngestOutcome(None, pr, det, applied, time.perf_counter() - t0, held=held)
     return IngestOutcome(pres, pr, det, applied, time.perf_counter() - t0)
+
+
+def hold_if_billed_before(
+    eng: Engine,
+    invoice_ids: list[int],
+    det: dict[str, Any] | None,
+    *,
+    user_id: int | None,
+    keep_documents: bool = False,
+) -> dict[str, Any] | None:
+    """Interactive uploads: if anything on the new invoices was already billed on another invoice,
+    take them back out again and describe the matches, so nothing is saved until the user confirms.
+
+    The upload is ingested and checked exactly as a confirmed one would be (same rules, same
+    thresholds); only then is it rolled back. Returns None when nothing matched."""
+    from invoice_analytics.data_admin import delete_invoices
+
+    repeats = ((det or {}).get("history") or {}).get("repeats") or []
+    if not repeats:
+        return None
+    ph = ",".join("?" * len(invoice_ids))
+    flag_ids = [r["flag_id"] for r in repeats]
+    fph = ",".join("?" * len(flag_ids))
+    new = eng.db.query(
+        f"SELECT i.id, i.invoice_number_raw AS number, i.invoice_date AS date, i.total_cents, p.display_name AS party"
+        f" FROM invoices i JOIN parties p ON p.id=i.party_id WHERE i.id IN ({ph}) ORDER BY i.id",
+        list(invoice_ids),
+    )
+    rows = eng.db.query(
+        f"SELECT f.subject_type, f.subject_id, f.counterpart_invoice_ids FROM flags f WHERE f.id IN ({fph})", flag_ids
+    )
+    earlier_ids = sorted({int(x) for r in rows for x in json.loads(r["counterpart_invoice_ids"])} - set(invoice_ids))
+    eph = ",".join("?" * len(earlier_ids)) or "NULL"
+    earlier = eng.db.query(
+        f"SELECT i.id, i.invoice_number_raw AS number, i.invoice_date AS date, i.total_cents, p.display_name AS party"
+        f" FROM invoices i JOIN parties p ON p.id=i.party_id WHERE i.id IN ({eph}) ORDER BY i.invoice_date, i.id",
+        earlier_ids,
+    )
+    lines_matched = len({r["subject_id"] for r in rows if r["subject_type"] == "LINE"})
+    held = {
+        "invoices": new,
+        "earlier_invoices": earlier,
+        "lines_checked": ((det or {}).get("history") or {}).get("lines", 0),
+        "lines_matched": lines_matched,
+        "repeat_count": len(repeats),
+        "repeats": [{k: r[k] for k in ("rule_id", "tier", "summary")} for r in repeats[:50]],
+    }
+    delete_invoices(
+        eng,
+        list(invoice_ids),
+        user_id=user_id,
+        audit_action="INGEST_HELD_DUPLICATE",
+        keep_documents=keep_documents,
+        drop_empty_parties=True,
+    )
+    return held
 
 
 def run_incremental(eng: Engine, pres: PersistResult, user_id: int | None) -> dict[str, Any]:

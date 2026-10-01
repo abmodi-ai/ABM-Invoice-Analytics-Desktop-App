@@ -199,7 +199,8 @@ async def ingest_files(
     s: Session = Reviewer,
 ) -> dict[str, Any]:
     jobs = request.app.state.ingest_jobs
-    opts = json.loads(options or "{}")
+    # Uploads are held back for confirmation when anything on them was billed before.
+    opts = {"hold_duplicates": True, **json.loads(options or "{}")}
     mp = json.loads(mapping) if mapping else None
     out = []
     for f in files:
@@ -223,6 +224,24 @@ def ingest_job(job_id: int, request: Request, s: Session = Viewer) -> dict[str, 
     if j is None:
         raise HTTPException(404, "job not found")
     return j.public()  # type: ignore[no-any-return]
+
+
+@router.post("/ingest/jobs/{job_id}/confirm", tags=["ingest"])
+def ingest_job_confirm(job_id: int, request: Request, s: Session = Reviewer) -> dict[str, Any]:
+    """Save an upload that was held back as a possible duplicate."""
+    try:
+        return request.app.state.ingest_jobs.confirm(job_id, s.user_id).public()  # type: ignore[no-any-return]
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0])) from e
+
+
+@router.post("/ingest/jobs/{job_id}/discard", tags=["ingest"])
+def ingest_job_discard(job_id: int, request: Request, s: Session = Reviewer) -> dict[str, Any]:
+    """Drop an upload that was held back as a possible duplicate; nothing of it is kept."""
+    try:
+        return request.app.state.ingest_jobs.discard(job_id, s.user_id).public()  # type: ignore[no-any-return]
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0])) from e
 
 
 class MappingSubmit(BaseModel):
@@ -344,7 +363,8 @@ def accept_draft_ep(draft_id: int, body: DraftAccept, request: Request, s: Sessi
     if body.lines is not None:
         corrected["lines"] = body.lines
     try:
-        return accept_draft(E(request), draft_id, corrected, user_id=s.user_id, options=body.options)
+        opts = {"hold_duplicates": True, **body.options}  # send confirm_duplicates: true to save anyway
+        return accept_draft(E(request), draft_id, corrected, user_id=s.user_id, options=opts)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 
@@ -421,6 +441,57 @@ def invoices(
     return {"total": total, "items": rows}
 
 
+def line_duplicates(eng: Engine, invoice_id: int) -> dict[int, list[dict[str, Any]]]:
+    """For each line of the invoice, the open hard/probable line flags that involve it, and the line(s)
+    and invoice it matches: on another invoice ("billed before") or on this one ("repeated")."""
+    flags = eng.db.query(
+        "SELECT f.id, f.rule_id, f.tier, f.subject_id, f.subject_invoice_id, f.counterpart_ids,"
+        " json_extract(f.evidence,'$.summary') AS summary FROM flags f"
+        " WHERE f.subject_type='LINE' AND f.active=1 AND f.suppressed_by IS NULL AND f.tier IN ('HARD','PROBABLE')"
+        " AND f.status IN ('OPEN','NEEDS_INFO','CONFIRMED')"
+        " AND (f.subject_invoice_id=? OR EXISTS (SELECT 1 FROM json_each(f.counterpart_invoice_ids) WHERE value=?))",
+        (invoice_id, invoice_id),
+    )
+    if not flags:
+        return {}
+    line_ids = {int(f["subject_id"]) for f in flags} | {int(x) for f in flags for x in json.loads(f["counterpart_ids"])}
+    ph = ",".join("?" * len(line_ids))
+    where = {
+        r["id"]: r
+        for r in eng.db.query(
+            f"SELECT l.id, l.line_no, l.invoice_id, i.invoice_number_raw AS number FROM invoice_lines l"
+            f" JOIN invoices i ON i.id=l.invoice_id WHERE l.id IN ({ph})",
+            sorted(line_ids),
+        )
+    }
+    out: dict[int, list[dict[str, Any]]] = {}
+    for f in flags:
+        group = [int(f["subject_id"]), *(int(x) for x in json.loads(f["counterpart_ids"]))]
+        for lid in group:
+            me = where.get(lid)
+            if me is None or me["invoice_id"] != invoice_id:
+                continue
+            others = [where[o] for o in group if o != lid and o in where]
+            if not others:
+                continue
+            other = others[0]
+            out.setdefault(lid, []).append(
+                {
+                    "flag_id": f["id"],
+                    "rule_id": f["rule_id"],
+                    "tier": f["tier"],
+                    "summary": f["summary"],
+                    "same_invoice": other["invoice_id"] == invoice_id,
+                    "other_invoice_id": other["invoice_id"],
+                    "other_invoice_number": other["number"],
+                    "other_line_no": other["line_no"],
+                }
+            )
+    for v in out.values():  # strongest first
+        v.sort(key=lambda d: (d["tier"] != "HARD", d["same_invoice"], d["rule_id"]))
+    return out
+
+
 def invoice_detail(eng: Engine, invoice_id: int, user_id: int | None) -> dict[str, Any]:
     inv = eng.db.one(
         "SELECT i.*, p.display_name AS party, p.cluster_id AS party_cluster, d.source_path, d.ingest_method, d.sha256"
@@ -449,6 +520,9 @@ def invoice_detail(eng: Engine, invoice_id: int, user_id: int | None) -> dict[st
         )
         li["modifiers"] = json.loads(li["modifiers"])
         li["dx_codes"] = json.loads(li["dx_codes"])
+    dups = line_duplicates(eng, invoice_id)
+    for li in lines:
+        li["duplicates"] = dups.get(li["id"], [])
     inv["lines"] = lines
     inv["flags"] = eng.db.query(
         "SELECT id, rule_id, tier, status, score, suppressed_by, amount_at_risk_cents, subject_type,"

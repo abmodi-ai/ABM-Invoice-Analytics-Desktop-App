@@ -50,6 +50,13 @@ Drag files onto the Ingest page, or click **Choose files**. Supported formats:
 Dates that could be read two ways (03/04/2026) are never guessed. They are marked **check date**.
 Choose the date order in the mapping wizard.
 
+**Possible duplicates are not saved without your say-so.** When a file you upload repeats something
+already billed (the same invoice, or a line already billed for the same patient or trial subject),
+the app holds it back and shows what matched and where. Choose **Upload anyway** to save it (the
+matches go to the review queue as flags) or **Discard file** to drop it; nothing of a discarded
+file is kept. The same check runs when you accept a corrected document. Files picked up from a
+watched folder are saved and flagged as before, since nobody is there to confirm them.
+
 After each file, the **Billed before?** column answers whether anything on it was already billed on
 another invoice: **Yes**, with links to the matching flags, or **No**, with how many earlier lines for
 the same patients or trial subjects it was checked against. A trial subject billed again for a
@@ -80,6 +87,10 @@ you can record the **amount recovered**; it feeds the dashboard and reports.
 
 Dismissing a pair as *not a duplicate* teaches ABM Invoice Analytics: the same pair is not raised again (it is
 kept for audit).
+
+Lines that may be duplicates are shaded on the invoice page and in the side-by-side view, labelled
+**Billed before on <invoice> (line n)** or **Repeated on this invoice**, with a link to the flag.
+A line stops being marked once its flags are dismissed.
 
 ## Invoices and search
 

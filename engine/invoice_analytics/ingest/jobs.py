@@ -2,7 +2,8 @@
 
 Uploaded bytes stay in memory (never written to a temp file) while a background thread ingests
 them, so the UI can show per-file status without waiting. Files that need a CSV mapping wait
-in memory (up to an hour) for the user to finish the mapping wizard.
+in memory (up to an hour) for the user to finish the mapping wizard, and so do uploads held back
+as possible duplicates, until the user confirms or discards them.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from typing import Any
 
 from invoice_analytics.context import Engine
 from invoice_analytics.ingest.service import NeedsMapping, ingest_bytes
+from invoice_analytics.security import audit
 
 log = logging.getLogger("invoice_analytics.ingest.jobs")
 KEEP_SECONDS = 3600
@@ -31,12 +33,15 @@ class IngestJob:
     size: int
     user_id: int | None
     options: dict[str, Any]
-    status: str = "QUEUED"  # QUEUED | RUNNING | DONE | NEEDS_MAPPING | NEEDS_REVIEW | FAILED
+    # QUEUED | RUNNING | DONE | NEEDS_MAPPING | NEEDS_REVIEW | NEEDS_CONFIRMATION | DISCARDED | FAILED
+    status: str = "QUEUED"
     result: dict[str, Any] | None = None
     error: str | None = None
     created: float = field(default_factory=time.time)
     data: bytes | None = None
     source: str = "upload"
+    mapping: dict[str, str] | None = None  # kept so a confirmed duplicate is ingested the same way
+    template_id: int | None = None
 
     def public(self) -> dict[str, Any]:
         return {
@@ -94,6 +99,29 @@ class IngestJobs:
         self._pool.submit(self._run, job, mapping, template_id)
         return job
 
+    def confirm(self, job_id: int, user_id: int | None) -> IngestJob:
+        """The user looked at the possible duplicates and wants the file saved anyway."""
+        job = self.get(job_id)
+        if job is None or job.status != "NEEDS_CONFIRMATION" or job.data is None:
+            raise KeyError("job not found, expired or not waiting for confirmation")
+        audit.record(
+            self.eng.db, "INGEST_DUPLICATE_CONFIRMED", user_id=user_id, entity_type="ingest_job", entity_id=job.filename
+        )
+        job.status = "QUEUED"
+        job.options["confirm_duplicates"] = True
+        self._pool.submit(self._run, job, job.mapping, job.template_id)
+        return job
+
+    def discard(self, job_id: int, user_id: int | None) -> IngestJob:
+        job = self.get(job_id)
+        if job is None or job.status != "NEEDS_CONFIRMATION":
+            raise KeyError("job not found, expired or not waiting for confirmation")
+        audit.record(
+            self.eng.db, "INGEST_DUPLICATE_DISCARDED", user_id=user_id, entity_type="ingest_job", entity_id=job.filename
+        )
+        job.status, job.data = "DISCARDED", None
+        return job
+
     def get(self, job_id: int) -> IngestJob | None:
         with self._lock:
             return self._jobs.get(job_id)
@@ -104,6 +132,7 @@ class IngestJobs:
 
     def _run(self, job: IngestJob, mapping: dict[str, str] | None, template_id: int | None) -> None:
         job.status = "RUNNING"
+        job.mapping, job.template_id = mapping, template_id
         try:
             assert job.data is not None
             out = ingest_bytes(
@@ -116,6 +145,9 @@ class IngestJobs:
                 options=job.options,
             )
             job.result = out.as_dict()
+            if out.held:
+                job.status = "NEEDS_CONFIRMATION"
+                return  # keep the bytes until the user confirms or discards
             if out.parse.meta.get("needs_review_draft_id"):
                 job.status = "NEEDS_REVIEW"
             elif out.persist is None and out.parse.errors:

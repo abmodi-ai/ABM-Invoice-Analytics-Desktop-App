@@ -341,4 +341,18 @@ def accept_draft(
             conn=c,
         )
     det = run_incremental(eng, res, user_id) if res.invoice_ids else None
-    return {"persist": res.as_dict(), "detection": det}
+    opts = options or {}
+    if det and opts.get("hold_duplicates") and not opts.get("confirm_duplicates"):
+        from invoice_analytics.ingest.service import hold_if_billed_before
+
+        held = hold_if_billed_before(eng, res.invoice_ids, det, user_id=user_id, keep_documents=True)
+        if held:
+            with eng.db.tx() as c:  # back to the correction queue, keeping the user's corrections
+                c.execute(
+                    "UPDATE extraction_drafts SET status='OPEN', updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')"
+                    " WHERE id=?",
+                    (draft_id,),
+                )
+                c.execute("UPDATE documents SET ingest_status='NEEDS_REVIEW' WHERE id=?", (d["document_id"],))
+            return {"persist": None, "detection": det, "held": held}
+    return {"persist": res.as_dict(), "detection": det, "held": None}

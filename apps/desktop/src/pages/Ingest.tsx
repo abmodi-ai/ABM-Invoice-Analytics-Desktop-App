@@ -13,7 +13,19 @@ const STATUS_TONE: Record<string, "neutral" | "good" | "accent" | "warn" | "bad"
   DONE: "good",
   NEEDS_MAPPING: "warn",
   NEEDS_REVIEW: "warn",
+  NEEDS_CONFIRMATION: "warn",
+  DISCARDED: "neutral",
   FAILED: "bad",
+};
+function refreshAfterSave(qc: ReturnType<typeof useQueryClient>) {
+  for (const key of ["invoices", "invoice", "flags", "flag", "dashboard", "docs-review"]) {
+    qc.invalidateQueries({ queryKey: [key] });
+  }
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  NEEDS_CONFIRMATION: "possible duplicate: not saved",
+  DISCARDED: "discarded",
 };
 
 export default function IngestPage() {
@@ -23,6 +35,8 @@ export default function IngestPage() {
   const [drag, setDrag] = useState(false);
   const [mappingJob, setMappingJob] = useState<any>(null);
   const [draftId, setDraftId] = useState<number | null>(null);
+  const [heldJob, setHeldJob] = useState<any>(null);
+  const shownHeld = useRef<Set<number>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
   const jobs = useQuery({
     queryKey: ["ingest-jobs"],
@@ -41,11 +55,29 @@ export default function IngestPage() {
   });
   const scan = useMutation({ mutationFn: () => api.post("/ingest/watch/scan"), onSuccess: () => qc.invalidateQueries({ queryKey: ["ingest-jobs"] }) });
 
+  const decide = useMutation({
+    mutationFn: ({ id, action }: { id: number; action: "confirm" | "discard" }) => api.post(`/ingest/jobs/${id}/${action}`),
+    onSuccess: () => {
+      setHeldJob(null);
+      qc.invalidateQueries({ queryKey: ["ingest-jobs"] });
+    },
+  });
+  // A file held back as a possible duplicate opens the warning straight away, once.
   useEffect(() => {
-    if (jobs.data?.some((j) => j.status === "DONE")) {
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["docs-review"] });
+    const j = jobs.data?.find((x) => x.status === "NEEDS_CONFIRMATION" && !shownHeld.current.has(x.id));
+    if (j && !heldJob) {
+      shownHeld.current.add(j.id);
+      setHeldJob(j);
     }
+  }, [jobs.data, heldJob]);
+
+  // When an upload is saved, everything that lists invoices or flags is out of date.
+  const savedJobs = useRef<Set<number> | null>(null);
+  useEffect(() => {
+    const done = (jobs.data ?? []).filter((j) => j.status === "DONE").map((j) => j.id);
+    const seen = savedJobs.current;
+    savedJobs.current = new Set(done);
+    if (seen && done.some((id) => !seen.has(id))) refreshAfterSave(qc);
   }, [jobs.data, qc]);
 
   return (
@@ -114,13 +146,17 @@ export default function IngestPage() {
                       <div className="text-xs text-ink-3">{j.source}</div>
                     </Td>
                     <Td>
-                      <Badge tone={STATUS_TONE[j.status]}>{j.status.replace("_", " ").toLowerCase()}</Badge>
+                      <Badge tone={STATUS_TONE[j.status]}>{STATUS_LABEL[j.status] ?? j.status.replaceAll("_", " ").toLowerCase()}</Badge>
                     </Td>
                     <Td className="num text-right">{num(p?.invoice_count)}</Td>
                     <Td className="num text-right">{num(p?.line_count)}</Td>
                     <Td className="num text-right">{num(j.result?.detection?.new_flags)}</Td>
                     <Td className="max-w-sm text-xs">
-                      <BilledBefore h={j.result?.detection?.history} />
+                      {j.result?.held ? (
+                        <HeldSummary held={j.result.held} decided={j.status !== "NEEDS_CONFIRMATION"} />
+                      ) : (
+                        <BilledBefore h={j.result?.detection?.history} />
+                      )}
                     </Td>
                     <Td className="max-w-md text-xs text-ink-2">
                       {j.error}
@@ -136,6 +172,11 @@ export default function IngestPage() {
                       {j.status === "NEEDS_MAPPING" && (
                         <Button size="sm" variant="primary" onClick={() => setMappingJob(j)}>
                           Map columns
+                        </Button>
+                      )}
+                      {j.status === "NEEDS_CONFIRMATION" && (
+                        <Button size="sm" variant="primary" onClick={() => setHeldJob(j)}>
+                          Review duplicate
                         </Button>
                       )}
                       {j.status === "NEEDS_REVIEW" && (
@@ -187,6 +228,19 @@ export default function IngestPage() {
       </Card>
       {mappingJob && <MappingWizard job={mappingJob} defaults={opts} onClose={() => setMappingJob(null)} />}
       {draftId && <CorrectionView draftId={draftId} onClose={() => setDraftId(null)} />}
+      {heldJob && (
+        <DuplicateWarning
+          filename={heldJob.filename}
+          held={heldJob.result.held}
+          busy={decide.isPending}
+          error={decide.error}
+          confirmLabel="Upload anyway"
+          cancelLabel="Discard file"
+          onConfirm={() => decide.mutate({ id: heldJob.id, action: "confirm" })}
+          onCancel={() => decide.mutate({ id: heldJob.id, action: "discard" })}
+          onClose={() => setHeldJob(null)}
+        />
+      )}
     </div>
   );
 }
@@ -324,11 +378,17 @@ function CorrectionView({ draftId, onClose }: { draftId: number; onClose: () => 
     };
   }, [d.data]);
 
+  const [held, setHeld] = useState<any>(null);
   const accept = useMutation({
-    mutationFn: () => api.post(`/drafts/${draftId}/accept`, { invoice: inv, lines, from_ai: fromAi }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["docs-review"] });
+    mutationFn: (confirm: boolean) =>
+      api.post(`/drafts/${draftId}/accept`, { invoice: inv, lines, from_ai: fromAi, options: confirm ? { confirm_duplicates: true } : {} }),
+    onSuccess: (res: any) => {
+      if (res?.held) {
+        setHeld(res.held); // nothing saved yet: ask first
+        return;
+      }
       qc.invalidateQueries({ queryKey: ["ingest-jobs"] });
+      refreshAfterSave(qc);
       onClose();
     },
   });
@@ -426,12 +486,25 @@ function CorrectionView({ draftId, onClose }: { draftId: number; onClose: () => 
               <Button variant="ghost" onClick={() => reject.mutate()}>
                 Reject document
               </Button>
-              <Button variant="primary" loading={accept.isPending} onClick={() => accept.mutate()}>
+              <Button variant="primary" loading={accept.isPending} onClick={() => accept.mutate(false)}>
                 Accept and ingest
               </Button>
             </div>
           </div>
         </div>
+      )}
+      {held && (
+        <DuplicateWarning
+          filename="This document"
+          held={held}
+          busy={accept.isPending}
+          error={accept.error}
+          confirmLabel="Ingest anyway"
+          cancelLabel="Back to correction"
+          onConfirm={() => accept.mutate(true)}
+          onCancel={() => setHeld(null)}
+          onClose={() => setHeld(null)}
+        />
       )}
     </Modal>
   );
@@ -467,5 +540,102 @@ function BilledBefore({ h }: { h?: any }) {
         ? `Checked ${num(h.lines)} line${h.lines === 1 ? "" : "s"} for ${who} against ${num(h.earlier_lines)} earlier line${h.earlier_lines === 1 ? "" : "s"} on ${num(h.earlier_invoices)} other invoice${h.earlier_invoices === 1 ? "" : "s"}.`
         : `First invoice for ${who}; nothing earlier to compare with.`}
     </div>
+  );
+}
+
+function HeldSummary({ held, decided }: { held: any; decided: boolean }) {
+  return (
+    <div className="space-y-1">
+      <Badge tone={decided ? "neutral" : "warn"}>
+        Yes: {held.lines_matched > 0 ? `${num(held.lines_matched)} of ${num(held.lines_checked)} lines` : "this invoice"} already billed
+      </Badge>
+      <div className="text-ink-2">
+        On {held.earlier_invoices.map((e: any) => e.number).join(", ") || "an earlier invoice"}.{" "}
+        {decided ? "" : "Not saved until you confirm."}
+      </div>
+    </div>
+  );
+}
+
+function DuplicateWarning({
+  filename,
+  held,
+  busy,
+  error,
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  onCancel,
+  onClose,
+}: {
+  filename: string;
+  held: any;
+  busy: boolean;
+  error: unknown;
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  onClose: () => void;
+}) {
+  const inv = held.invoices[0];
+  return (
+    <Modal open onClose={onClose} title="Possible duplicate: this may already have been billed">
+      <div className="space-y-3 text-sm">
+        <p>
+          <b>{filename}</b>
+          {inv && (
+            <>
+              {" "}
+              (invoice {inv.invoice_number ?? inv.number} from {inv.party}, {money(inv.total_cents)})
+            </>
+          )}{" "}
+          matches what was already billed
+          {held.lines_matched > 0 && (
+            <>
+              : <b>{num(held.lines_matched)}</b> of its {num(held.lines_checked)} lines
+            </>
+          )}
+          . <b>It has not been saved.</b>
+        </p>
+        <div>
+          <div className="mb-1 text-xs font-medium text-ink-2">Already billed on</div>
+          <ul className="list-disc pl-5">
+            {held.earlier_invoices.map((e: any) => (
+              <li key={e.id}>
+                <Link className="text-accent-ink hover:underline" to={`/invoices/${e.id}`} onClick={onClose}>
+                  {e.number}
+                </Link>{" "}
+                · {e.party} · {e.date ?? "no date"} · {money(e.total_cents)}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <div className="mb-1 text-xs font-medium text-ink-2">What matched ({num(held.repeat_count)})</div>
+          <ul className="max-h-48 space-y-1 overflow-auto rounded border border-border p-2 text-xs">
+            {held.repeats.slice(0, 12).map((r: any, i: number) => (
+              <li key={i}>
+                <span className="font-mono text-ink-2">{r.rule_id}</span> {r.summary}
+              </li>
+            ))}
+            {held.repeat_count > 12 && <li className="text-ink-3">+{num(held.repeat_count - 12)} more</li>}
+          </ul>
+        </div>
+        <p className="text-ink-2">
+          If it is a genuine new bill (a corrected invoice, a legitimate repeat), save it anyway: the matches are kept
+          as flags in the review queue. Otherwise nothing of it is kept.
+        </p>
+        <ErrorBox error={error} />
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onCancel} disabled={busy}>
+            {cancelLabel}
+          </Button>
+          <Button variant="primary" onClick={onConfirm} loading={busy}>
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }

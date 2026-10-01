@@ -111,6 +111,10 @@ def test_ingest_mapping_wizard_review_and_reports(client: TestClient, engine: En
     # the saved template is applied automatically next time
     r = client.post("/ingest/files", headers=rev, files=[("files", ("b.csv", body2.encode(), "text/csv"))])
     j2 = _wait_ingest(client, rev, r.json()["jobs"][0]["id"])
+    # it bills the same service again, so it is held until the reviewer confirms it
+    assert j2["status"] == "NEEDS_CONFIRMATION" and j2["result"]["held"]["earlier_invoices"]
+    client.post(f"/ingest/jobs/{j2['id']}/confirm", headers=rev)
+    j2 = _wait_ingest(client, rev, j2["id"])
     assert j2["status"] == "DONE" and j2["result"]["detection"]["new_flags"] >= 2
     flags = client.get("/flags", headers=rev).json()
     assert flags["total"] >= 2 and flags["items"][0]["tier"] == "HARD"

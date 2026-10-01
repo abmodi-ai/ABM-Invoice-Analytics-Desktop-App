@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { Badge, Button, Card, ErrorBox, Modal, PageHeader, Spinner, Table, Td, Th, TierBadge } from "../components/ui";
+import { DuplicateLabel, countPossibleDuplicates, duplicateRowClass, isPossibleDuplicate } from "../components/duplicates";
 import { useAuth } from "../lib/auth";
 import { dateTime, display, money } from "../lib/format";
 
@@ -41,6 +42,7 @@ export default function InvoiceDetailPage() {
   if (q.error) return <ErrorBox error={q.error} />;
   const inv = q.data;
   const hasVisits = inv.lines.some((l: any) => l.visit_label);
+  const nDup = countPossibleDuplicates(inv.lines);
   return (
     <div className="space-y-4">
       <PageHeader
@@ -122,11 +124,23 @@ export default function InvoiceDetailPage() {
           )}
         </Card>
       </div>
-      <Card title="Lines">
+      <Card
+        title="Lines"
+        actions={
+          nDup > 0 ? (
+            <Badge tone="warn">
+              {nDup} of {inv.lines.length} line{inv.lines.length === 1 ? "" : "s"} may be duplicate{nDup === 1 ? "" : "s"}
+            </Badge>
+          ) : (
+            <Badge tone="good">No possible duplicate lines</Badge>
+          )
+        }
+      >
         <Table>
           <thead>
             <tr>
               <Th>#</Th>
+              <Th>Possible duplicate</Th>
               <Th>Patient</Th>
               <Th>DOS</Th>
               {hasVisits && <Th>Visit</Th>}
@@ -141,8 +155,11 @@ export default function InvoiceDetailPage() {
           </thead>
           <tbody>
             {inv.lines.map((l: any) => (
-              <tr key={l.id}>
+              <tr key={l.id} className={isPossibleDuplicate(l) ? duplicateRowClass : undefined}>
                 <Td>{l.line_no}</Td>
+                <Td className="text-xs">
+                  <DuplicateLabel dups={l.duplicates} />
+                </Td>
                 <Td>
                   {l.patient_name ?? "—"} {l.patient_cluster && <span className="text-xs text-ink-3">P-{l.patient_cluster}</span>}
                 </Td>
