@@ -95,7 +95,10 @@ fn engine_command(app: &tauri::AppHandle) -> Command {
     if let Ok(appdir) = std::env::var("APPDIR") {
         dirs.push(PathBuf::from(appdir).join("usr/lib").join(&app.package_info().name)); // AppImage
     }
-    if let Some(dir) = dirs.iter().map(|d| d.join("engine")).find(|d| d.join(exe).exists()) {
+    // Development builds run the engine from the repository (current code), never a stale packaged
+    // copy that `tauri build` may have left next to the debug binary.
+    let bundled = if cfg!(debug_assertions) { None } else { dirs.iter().map(|d| d.join("engine")).find(|d| d.join(exe).exists()) };
+    if let Some(dir) = bundled {
         eprintln!("engine: {}", dir.join(exe).display());
         let mut c = Command::new(dir.join(exe));
         c.current_dir(dir);
